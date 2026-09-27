@@ -4,12 +4,12 @@ export const TRAIN_SHOTS = [
   { kind: 'card', duration: 3.2, eyebrow: 'PROLOGUE', title: 'あの事件から、十年。' },
   { src: '/shibuya-cho/assets/opening/shinkansen-fuji.mp4', duration: 8, label: '東海道新幹線 · 東京へ',
     cues: [{ start: 1, end: 7.5, speaker: '柊からの手紙', text: '渋沢、久しぶりだな。' }] },
-  // The date is undecided in STORY.md. This is an excerpt, not an invented date.
+  // Appointment confirmed by the user: October 1, 20:00.
   { kind: 'card', duration: 11, eyebrow: '柊からの手紙', title: '10年前のあの事件の真相について\n話したいことがある。',
-    detail: '20時に渋谷町のハチ公前で会おう。', signature: '柊' },
+    detail: '10月1日の20時に渋谷町のハチ公前で会おう。', signature: '柊' },
   { src: '/shibuya-cho/assets/opening/shinagawa-arrival.mp4', duration: 8, label: '品川駅', cues: [] },
   { src: '/shibuya-cho/assets/opening/yamanote-shibuya.mp4', duration: 8, label: '山手線 · 渋谷へ', cues: [] },
-  { kind: 'card', duration: 3.6, eyebrow: '待ち合わせ', title: '20:00', detail: '渋谷町　ハチ公前' },
+  { kind: 'card', duration: 3.6, eyebrow: '待ち合わせ', title: '10月1日 20:00', detail: '渋谷町　ハチ公前' },
 ];
 
 export function playTrainOpening(engine, onComplete, shots = TRAIN_SHOTS) {

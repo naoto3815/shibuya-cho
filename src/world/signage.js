@@ -13,6 +13,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
+import { CANVAS_K } from '../core/mobileProfile.js';
 
 const F = {
   gothic: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif',
@@ -59,7 +60,7 @@ function makeMaterial(style, tex) {
 
 class Page {
   constructor(name, style, index) {
-    this.name = name; this.style = style; this.index = index; this.size = style.size;
+    this.name = name; this.style = style; this.index = index; this.size = Math.round(style.size * CANVAS_K);   // [mobile] ?canvasK
     const c = document.createElement('canvas'); c.width = c.height = this.size;
     this.canvas = c; this.ctx = c.getContext('2d');
     this.ctx.fillStyle = '#000'; this.ctx.fillRect(0, 0, this.size, this.size);
@@ -80,13 +81,20 @@ class Page {
     return { x: 0, y: s.y, w, h };
   }
   // hand the pixels to an ImageBitmap and drop the canvas backing store (r186 ignores flipY for bitmaps, so flip here)
-  // [mobile] maxPx (?texmax): the bitmap is made that size (UVs are normalised; the GPU copy is capped there anyway)
+  // [mobile] maxPx (?texmax): sealed at once into a canvas of that size (UVs are normalised; the GPU copy is capped there
+  // anyway) and the page's own canvas let go — synchronously, because the city's signs are painted in one long init and a
+  // bitmap promise would only settle after it, with every page still held
   seal(maxPx = 0) {
     if (this.sealed) return; this.sealed = true;
     const canvas = this.canvas, tex = this.texture;
+    if (maxPx > 0 && canvas) {
+      const n = Math.min(maxPx, this.size), c = document.createElement('canvas'); c.width = c.height = n;
+      const g = c.getContext('2d');
+      if (g) { g.imageSmoothingQuality = 'high'; g.drawImage(canvas, 0, 0, n, n); tex.image = c; tex.needsUpdate = true; canvas.width = canvas.height = 1; this.canvas = null; this.ctx = null; }
+      return;
+    }
     if (typeof createImageBitmap !== 'function' || !canvas) return;
     const opt = { imageOrientation: 'flipY', premultiplyAlpha: 'none', colorSpaceConversion: 'none' };
-    if (maxPx > 0 && maxPx < this.size) Object.assign(opt, { resizeWidth: maxPx, resizeHeight: maxPx, resizeQuality: 'high' });
     createImageBitmap(canvas, opt).then((bmp) => {
       tex.image = bmp; tex.flipY = false; tex.needsUpdate = true;
       canvas.width = canvas.height = 0; this.canvas = null; this.ctx = null;
@@ -100,6 +108,9 @@ function pageFor(styleName, w, h) {
   const style = STYLES[styleName];
   const list = pages[styleName] || (pages[styleName] = []);
   for (const p of list) { if (p.sealed) continue; const r = p.alloc(w, h); if (r) return { page: p, rect: r }; }
+  // [mobile] ?texmax: the pages this style filled so far are sealed as soon as it needs another one, so a phone never holds
+  // more than one open canvas per style while the city is being signed (28 open 2048² pages were 460 MB at the boot's peak)
+  if (SEAL_PX >= 64) for (const q of list) q.seal(SEAL_PX);
   const p = new Page(styleName, style, list.length); list.push(p);
   const r = p.alloc(w, h);
   if (!r) { console.warn(`[signage] ${styleName} sign ${w}x${h}px too big for the atlas`); return null; }
@@ -121,6 +132,7 @@ function paint(styleName, wM, hM, key, bleed, painter, ppmOverride) {
   const maxPx = style.maxPx || 1024;
   if (Math.max(wM, hM) * ppm > maxPx) ppm = maxPx / Math.max(wM, hM);
   if (Math.min(wM, hM) * ppm < 40) ppm = 40 / Math.min(wM, hM);
+  ppm *= CANVAS_K;                                   // [mobile] the page and everything on it at the phone's scale
   const w = Math.round(wM * ppm), h = Math.round(hM * ppm);
   const got = pageFor(styleName, w + PAD * 2, h + PAD * 2);
   if (!got) return null;

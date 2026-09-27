@@ -46,7 +46,7 @@ const SCENES = {
     // reverse angle from the north: the 東急プラザ frontage and the streetlights are behind the camera, so his
     // face and the phone are lit instead of silhouetted against the crossing.
     { t: 4.8, e: 0.45, cam: { pos: P(-30.2, 1.58, 7.6), lookAt: P(-31.0, 1.45, 10.5), fov: 32 },
-      msg: { from: '柊からの手紙', body: '10年前のあの事件の真相について話したい。XX月XX日の20時、渋谷町のハチ公前で会おう。' }, say: [HERO, '……柊。懲役八年。あの時、俺たちは何も知らされなかった。'], key: true },
+      msg: { from: '柊からの手紙', body: '10年前のあの事件の真相について話したい。10月1日の20時、渋谷町のハチ公前で会おう。' }, say: [HERO, '……柊。懲役八年。あの時、俺たちは何も知らされなかった。'], key: true },
     { t: 3.6, e: 0.8, cam: { pos: P(-37, 8.5, 20), lookAt: P(-30.8, 1.3, 10.2), fov: 40 },
       say: [HERO, '十年経った。今度こそ、お前から話を聞かせてもらう。'] },
   ],
@@ -861,7 +861,7 @@ const missions = {
     // first one registered wins) and is not built until that scan has loaded, or it would come out procedural.
     const pick = (v) => (Array.isArray(v) ? v.find((k) => !k.startsWith('ped_') || PED_SCANS.some((q) => q.variant === k)) : v);
     for (const def of sub.npcs) { const v = pick(def.variant); if (v && v.startsWith('ped_') && !pedScanReady(v)) return null; }
-    const base = this.snap(sub.spot[0], sub.spot[1]);
+    const base = sub.fixed ? new THREE.Vector3(sub.spot[0],0,sub.spot[1]) : this.snap(sub.spot[0], sub.spot[1]);
     sub._npcs = [];
     for (const def of sub.npcs) {
       let h;
@@ -1166,6 +1166,7 @@ const missions = {
       }
     }
 
+    this.updateChapterActors?.(dt);
     this.syncStoryCast?.();
     // --- cutscene timeline
     if (this.scene) { this.scene.t += dt; this.scene.total += dt; if (this.scene.t >= this.scene.beats[this.scene.i].t) this.nextBeat(); this.projectPrompts(); return; }
@@ -1220,7 +1221,7 @@ const missions = {
   updateDist(dist) {
     const u = this.ui, p = this.engine.player, o = this.objectivePos;
     u.distCh.textContent = this.current.ch || CH;
-    u.distSt.textContent = `手順 ${[1,2,3,8,4,5,6,7][this.index] || this.index+1}/${STEPS.length}`;
+    u.distSt.textContent = `手順 ${[1,2,3,11,4,5,6,7,8,9,10][this.index] || this.index+1}/${STEPS.length}`;
     let d = dist;
     if (d == null && o && p) d = Math.hypot(p.position.x - o.x, p.position.z - o.z);
     u.dist.classList.toggle('nodist', d == null);

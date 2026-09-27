@@ -19,6 +19,7 @@
 //   makeCanvas(w,h), canvasTexture(canvas, opts), scaleUV(geometry, su, sv)
 //   shotPresets.materials_test / materials_day, selfTest()
 import * as THREE from 'three';
+import { fitCanvasTexture } from '../core/mobileProfile.js';
 
 export const KEYS = [
   'asphalt', 'road', 'roadPaint', 'roadPaintYellow', 'concrete', 'sidewalk', 'paverRed', 'paverGrey', 'tactile', 'curb', 'brick',
@@ -62,7 +63,7 @@ export function canvasTexture(canvas, { srgb = true, repeat = [1, 1], wrap = tru
   t.generateMipmaps = filter;
   t.minFilter = filter ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
   t.needsUpdate = true;
-  return t;
+  return fitCanvasTexture(t, 'materials');   // [mobile] ?texmax: redrawn at the phone's cap, the full-size canvas let go
 }
 
 export function scaleUV(geometry, su, sv) {
@@ -243,7 +244,10 @@ function timed(name, fn) {
 }
 
 // ---------------------------------------------------------------------------------------------- texture recipes
-const T1 = 1024, T2 = 512;
+// [mobile] ?matTex=<px> (the phones' safe tier): the procedural sets are generated at that size — their pixel-unit
+// details (gravel, cracks, joints) come out coarser, but a 1024² set is ~20 MB of scratch arrays before its first GC
+const MAT_Q = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('matTex')) : 0;
+const T1 = MAT_Q >= 128 ? Math.min(1024, MAT_Q) : 1024, T2 = T1 / 2;
 
 function texAsphalt() {                                       // tile 6 m
   if (sets.has('asphalt')) return sets.get('asphalt');

@@ -5,6 +5,7 @@
 //   textures:  textCanvas, signMaterial, signMesh, hash
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import { fitCanvasTexture } from '../../core/mobileProfile.js';
 
 export const FONT_JP = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif';
 export const FONT_LATIN = '"Helvetica Neue", Helvetica, Arial, "Hiragino Sans", sans-serif';
@@ -471,14 +472,16 @@ export class Instancer {
 
 // ------------------------------------------------------------------------------------------------- textures
 export function makeCanvas(w, h) { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; }
-export function canvasTex(c, { srgb = true, repeat = null, wrap = false, aniso = 8, mips = true } = {}) {
+// [mobile] a finished canvas is redrawn at the phone's texture cap and the full-size one let go (mobileProfile.js
+// fitCanvasTexture); an atlas still being painted after this call passes live: true
+export function canvasTex(c, { srgb = true, repeat = null, wrap = false, aniso = 8, mips = true, live = false } = {}) {
   const t = new THREE.CanvasTexture(c);
   t.colorSpace = srgb ? THREE.SRGBColorSpace : THREE.NoColorSpace;
   if (wrap) t.wrapS = t.wrapT = THREE.RepeatWrapping; else t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   if (repeat) t.repeat.set(repeat[0], repeat[1]);
   t.anisotropy = aniso; t.generateMipmaps = mips; t.minFilter = mips ? THREE.LinearMipmapLinearFilter : THREE.LinearFilter;
   t.needsUpdate = true;
-  return t;
+  return live ? t : fitCanvasTexture(t, 'lib');
 }
 export function fitFont(ctx, text, maxW, maxH, weight, family) {
   let size = maxH;

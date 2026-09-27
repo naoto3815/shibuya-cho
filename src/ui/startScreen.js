@@ -6,21 +6,22 @@ import { renderRelationshipMap, mountRelationshipMap } from './relationshipMap.j
 // Front-end and versioned exploration checkpoints. Story revelations are explicit, never inferred from time.
 const SAVE = 'shibuya.save.v1', SETTINGS = 'shibuya.settings.v1';
 const FACTS = {
-  letter: ['柊 誠司', '同期・かつての親友', '十年前の事件の真相を話したい、という手紙が届いた。約束はXX月XX日の20時、渋谷町のハチ公前。'],
+  letter: ['柊 誠司', '同期・かつての親友', '十年前の事件の真相を話したい、という手紙が届いた。約束は10月1日の20時、渋谷町のハチ公前。'],
   junior: ['商社時代の後輩', 'ハチ公前で救出', '後輩も柊に呼ばれ、ハチ公前で待っていた。玄凪会の男たちに絡まれたところを健人が救出。'],
   fightclub_conflict: ['ファイトクラブ', '撮影をきっかけに対立', '朝比奈未空・朝比奈快・那珂川天真。ホストから金を取る場面を撮影され、衝突した。'],
   fightclub_allies: ['ファイトクラブ', '誤解を解いた仲間', '後輩の証言とホストへの確認で誤解が解けた。3人と協力して街の背後にある力を探る。'],
   messengers: ['ハチ公前の男たち', '柊からの伝言を持つ', '健人に接触し、柊の名前を口にした。柊との詳しい関係は不明。'],
-  reunion: ['柊 誠司', '再会した親友', '渋谷で再会。かつての商社マンとは異なる、冷たい態度を見せる。'],
+  reunion: ['柊 誠司', '再会した親友', '支社入口の構成員との戦闘後、支社から出てきた柊と再会。かつての商社マンとは異なる、冷たい態度を見せる。'],
   company: ['丸菱通商', '二人のかつての勤務先', '渋谷スクランブルスクエアに本社を置く商社。健人と柊は同期のライバルであり親友だった。'],
   past_case: ['十年前の機密事件', '二人の人生を変えた事件', '二人は社内の機密を知った。柊は罪を着せられて懲役八年。健人は退職して九州へ帰り、中小企業向けの経営コンサルを始めた。'],
   dtc: ['DTC', '調査対象の企業', 'デトロイトトーマスコンサルティング。経営支援を行う企業。'],
   gang: ['玄凪会', '九州から渋谷へ勢力を拡大', 'ハチ公前の男たちが所属する組織。男の証言によれば、柊も所属している。'],
-  hiiragi_whereabouts: ['柊の行方', 'センター街へ', '玄凪会の男から、柊がセンター街へ入ったと聞き出した。'],
+  assault_order: ['柊の命令という証言', '玄凪会の幹部', '後輩を襲った男は、怯えながら幹部の柊に命令されたと話した。命令の理由は不明。'],
+  hiiragi_whereabouts: ['柊の行方', 'センター街奥の支社へ', '玄凪会の男から、センター街奥の玄凪会支社に柊がいると聞き出した。'],
   infiltration: ['柊と組織', '組織の内部へ', '柊は冤罪の真相を追うため、組織に入っていた。'],
 };
 export function validSave(s) {
-  return !!s && s.version === 1 && [1, 3, 4, 6].includes(s.step) && Number.isFinite(s.yen) && s.yen >= 0 &&
+  return !!s && s.version === 1 && [1, 3, 4, 6, 8, 10].includes(s.step) && Number.isFinite(s.yen) && s.yen >= 0 &&
     Array.isArray(s.position) && s.position.length === 3 && s.position.every(v => Number.isFinite(v) && Math.abs(v) < 10000) &&
     Number.isFinite(s.yaw) && Number.isFinite(s.hp) && s.hp > 0 && s.hp <= 100 && Number.isFinite(s.heat) && s.heat >= 0 && s.heat <= 100 &&
     Array.isArray(s.done) && s.done.every(v => typeof v === 'string') && Array.isArray(s.facts) && s.facts.every(v => Object.hasOwn(FACTS, v)) && Number.isFinite(s.at);
@@ -49,7 +50,7 @@ export function createStartScreen(engine, menus) {
     el.dataset.page = f.page;
     let content = '';
     if (f.page === 'home') content = `<div class="brand"><p class="eyebrow">A STORY OF TRUST & BETRAYAL</p><h1 class="title-logo"><img src="/shibuya-cho/assets/menu/twin-dragon-logo-v1.png" width="1774" height="887" alt="ツインドラゴン — TWIN DRAGON"></h1><p class="tagline">十年ぶりの街。<br>一通の手紙。終わらない過去。</p></div><nav aria-label="開始メニュー">${button('new','ニューゲーム','NEW GAME')}${button('load','ロードゲーム','LOAD GAME')}${button('settings','設定','SETTINGS')}${button('relations','相関図','RELATIONSHIPS')}</nav><p class="save-note">${saved ? '保存あり · '+new Date(saved.at).toLocaleString('ja-JP') : '保存データなし · 探索中に自動保存'}</p>`;
-    if (f.page === 'load') content = `<h2>ロードゲーム</h2><p class="lead">最後に保存された探索地点から再開します。</p>${saved ? `<div class="save-card"><span>AUTO SAVE / 01</span><h3>${({1:'第一章・ハチ公前へ',3:'第一章クリア後・自由探索',4:'第一章・センター街へ',6:'第一章・ファイトクラブとの遭遇'})[saved.step]}</h3><p>${new Date(saved.at).toLocaleString('ja-JP')}</p><p>所持金 ¥${saved.yen.toLocaleString('ja-JP')} · 判明情報 ${saved.facts.length}件</p>${button('resume','このデータで再開','CONTINUE')}</div>` : '<div class="empty">読み込める保存データがありません。<p>ニューゲームを始めると、探索中に自動保存されます。</p></div>'}`;
+    if (f.page === 'load') content = `<h2>ロードゲーム</h2><p class="lead">最後に保存された探索地点から再開します。</p>${saved ? `<div class="save-card"><span>AUTO SAVE / 01</span><h3>${({1:'第一章・ハチ公前へ',3:'第一章クリア後・自由探索',4:'第一章・センター街へ',6:'第一章・ファイトクラブとの遭遇',8:'第一章・玄凪会支社へ',10:'第一章・柊との再会'})[saved.step]}</h3><p>${new Date(saved.at).toLocaleString('ja-JP')}</p><p>所持金 ¥${saved.yen.toLocaleString('ja-JP')} · 判明情報 ${saved.facts.length}件</p>${button('resume','このデータで再開','CONTINUE')}</div>` : '<div class="empty">読み込める保存データがありません。<p>ニューゲームを始めると、探索中に自動保存されます。</p></div>'}`;
     if (f.page === 'new') content = `<h2>新しい物語を始める</h2><p class="lead">現在の自動保存は、新しい物語の保存時に置き換わります。</p>${button('begin','ニューゲームを開始','START')}`;
     if (f.page === 'settings') { const a = engine.get('audio'); content = `<h2>設定</h2><p class="lead">変更はすぐに適用・保存されます。</p><label class="setting">マスター音量 <output id="volume-value">${Math.round((a?.getVolume?.() ?? .75)*100)}%</output><input aria-label="マスター音量" type="range" min="0" max="100" value="${Math.round((a?.getVolume?.() ?? .75)*100)}" data-setting="volume"></label><label class="setting check">ミュート<input type="checkbox" data-setting="muted" ${a?.muted ? 'checked' : ''}></label><label class="setting">カメラ感度 <output id="sensitivity-value">${f.settings.sensitivity.toFixed(1)}×</output><input aria-label="カメラ感度" type="range" min="0.5" max="2" step="0.1" value="${f.settings.sensitivity}" data-setting="sensitivity"></label><label class="setting">HUD表示<select data-setting="hud"><option value="normal" ${f.settings.hud==='normal'?'selected':''}>標準</option><option value="compact" ${f.settings.hud==='compact'?'selected':''}>コンパクト</option></select></label>`; }
     if (f.page === 'relations') {
@@ -90,7 +91,7 @@ export function createStartScreen(engine, menus) {
   };
   f.save = () => {
     const m=engine.get('missions'),p=engine.player;
-    if(!f.started || !m || !p || p.hp<=0 || engine.state.mode!=='explore' || m.scene || m.talk || m._resHold || ![1,3,4,6].includes(m.index)) return false;
+    if(!f.started || !m || !p || p.hp<=0 || engine.state.mode!=='explore' || m.scene || m.talk || m._resHold || ![1,3,4,6,8,10].includes(m.index)) return false;
     const s={version:1,storyRevision:STORY_REVISION,at:Date.now(),step:m.index,position:p.position.toArray(),yaw:p.yaw,hp:p.hp,heat:p.heat,yen:m.yen,done:m.SUBSTORIES.filter(s=>s.done).map(s=>s.id),facts:[...f.facts]};
     if(!validSave(s)) return false;
     return f.write(SAVE,s);

@@ -1,17 +1,22 @@
+import { installBranchOffice } from './branchOffice.js';
 import { CITY } from '../world/cityData.js';
 import { playTrainOpening } from '../ui/trainOpening.js';
-// Chapter-one story progression. Real-person roles below are fictional game dramatization.
+// Chapter-one progression. All Fight Club display names are fictional.
 export function installDoubleDragon(m, THREE) {
   const hero='渋沢 健人', junior='商社時代の後輩';
   const gate=CITY.pedestrianStreets.find(s=>s.id==='centergai').gate.pos;
   const center=new THREE.Vector3(gate[0],0,gate[1]);
   if(m._doubleDragonInstalled)return;
   m._doubleDragonInstalled=true;
+  installBranchOffice(m,THREE);
   m.STEPS.push(
-    {id:'go_center',text:'柊を探してセンター街の入口へ向かえ',pos:center,radius:5,head:'目的',ch:'第一章'},
+    {id:'go_center',text:'玄凪会支社へ向かえ — センター街を抜けろ',pos:center,radius:5,head:'目的',ch:'第一章'},
     {id:'host_fight',text:'絡んできたホストを倒せ',pos:null,radius:0,head:'戦闘',ch:'第一章'},
     {id:'club_ready',text:'ファイトクラブの3人と向き合え',pos:center,radius:7,head:'目的',ch:'第一章'},
-    {id:'club_fight',text:'ファイトクラブとの衝突を切り抜けろ',pos:null,radius:0,head:'戦闘',ch:'第一章'}
+    {id:'club_fight',text:'ファイトクラブとの衝突を切り抜けろ',pos:null,radius:0,head:'戦闘',ch:'第一章'},
+    {id:'go_branch',text:'センター街奥の玄凪会支社へ向かえ',pos:m.branchMark(0,3),radius:5,head:'目的',ch:'第一章'},
+    {id:'branch_fight',text:'支社入口の構成員を倒せ',pos:null,radius:0,head:'戦闘',ch:'第一章'},
+    {id:'hiiragi_reunion',text:'支社から現れた柊と向き合え',pos:m.branchMark(0,3),radius:5,head:'再会',ch:'第一章'}
   );
   const beat=(who,text,extra={})=>({t:Math.max(3.8,text.length*.12),say:[who,text],e:.12,rig:()=>m.storyShot(who),...extra});
   const reveal=id=>m.engine.events.emit('story:reveal',{id});
@@ -24,7 +29,7 @@ export function installDoubleDragon(m, THREE) {
     for(const cast of casts()) {
       m.npcFor(cast);
       if(cast._pin)cast._pin.group.visible=false;
-      for(const o of cast._npcs||[])o.h.group.rotation.y=Math.atan2(p.x-o.pos.x,p.z-o.pos.z);
+      for(const o of cast._npcs||[])if(m._hiiragiWalk?.actor!==o)o.h.group.rotation.y=Math.atan2(p.x-o.pos.x,p.z-o.pos.z);
     }
   };
   // Frame the actual speaker, including witnesses, instead of an empty enemy centroid.
@@ -57,10 +62,10 @@ export function installDoubleDragon(m, THREE) {
     }
     m.syncStoryCast();
   };
-  m.clearStoryCast=()=>{for(const key of ['storyCast','gangWitness','juniorWitness','hostWitness']){remove(m[key]);m[key]=null;}};
+  m.clearStoryCast=()=>{m._hiiragiWalk=null;for(const key of ['storyCast','gangWitness','juniorWitness','hostWitness']){remove(m[key]);m[key]=null;}};
   m.resetChapter=()=>{
     m.clearChain();m._resClose=null;m.hideResults();m.clearChain();
-    m.clearStoryCast();
+    m.clearStoryCast();m.resetBranchEntrance();
     for(const sub of m.SUBSTORIES){remove(sub);sub.done=sub.id==='tout';}
     m.engine.get('enemy').clear();
     m.scene=null;m.talk=null;m.fightCtx=null;m.spawned=false;m._clubEntrancePlaying=false;
@@ -81,16 +86,16 @@ export function installDoubleDragon(m, THREE) {
   m.SCENES.epilogue=[
     beat(junior,'助かりました、渋沢先輩。……先輩も、柊さんに呼ばれたんですか？',{do:()=>m.showStoryCast('junior')}),
     beat(hero,'お前もか。俺には、十年前の事件の真相を話したいと手紙が来た。'),
-    beat(junior,'僕にも連絡がありました。今夜二十時、ハチ公前で会おうって。待っていたら、この人たちに……。'),
-    beat(hero,'おい。柊を知ってるな。どこにいる。',{do:()=>{
+    beat(junior,'僕にも連絡がありました。十月一日の二十時、ハチ公前で会おうって。待っていたら、この人たちに……。'),
+    beat(hero,'おい。なぜ、こいつを襲った。誰に言われた。',{do:()=>{
       const p=m.engine.player.position;
       remove(m.gangWitness);
       m.gangWitness=actors([p.x-1.8,p.z-2],[{name:'玄凪会の男',variant:'enforcer_b',idle:'sit'}]);
       m.npcFor(m.gangWitness);if(m.gangWitness._pin)m.gangWitness._pin.group.visible=false;
     }}),
-    beat('玄凪会の男','……柊さんなら、俺たちと同じ玄凪会の人間だ。'),
-    beat(hero,'玄凪会……。柊が、あの組織に？'),
-    beat('玄凪会の男','さっきセンター街へ入っていった。それ以上は知らねえ。本当だ。'),
+    beat('玄凪会の男','ま、待ってくれ……！ 俺たちは、幹部の柊さんに命令されただけなんだ！'),
+    beat(hero,'柊が……玄凪会の幹部だと？ あいつはどこにいる。'),
+    beat('玄凪会の男','センター街の奥だ……玄凪会の支社がある。柊さんはそこにいる。頼む、もう勘弁してくれ。'),
     beat(junior,'僕たちを呼んでおいて、どうして……。'),
     beat(hero,'本人に聞く。お前は人のいる店に入って待ってろ。一人で追うな。')
   ];
@@ -125,41 +130,85 @@ export function installDoubleDragon(m, THREE) {
     beat(hero,'俺も熱くなった。金の取り方も、褒められたものじゃない。'),
     beat(junior,'僕もハチ公前で助けてもらいました。絡んできたのは、玄凪会の連中で……。'),
     beat('朝比奈快','玄凪会……最近、この辺の半グレを使って勢力を広げてる。俺たちも調べてた。'),
-    beat(hero,'俺は柊という男を探してる。あいつのことを知ってるなら、力を貸してくれ。'),
-    beat('朝比奈未空','まず話を聞かせて。次は、拳を使う前にな。'),
-    beat('那珂川天真','じゃあ、飯でも行こう。今度の相談料は、なしで。'),
+    beat(hero,'柊という男に会いに来た。玄凪会の幹部になっているらしい。センター街の奥の支社へ行く。'),
+    beat('朝比奈未空','俺たちも力を貸す。分かったことがあれば、知らせるよ。'),
+    beat('那珂川天真','気をつけて。今度の相談料は、なしでいいから。'),
     beat(hero,'……ああ。助かる。',{do:()=>reveal('fightclub_allies')})
   ];
+  const guards=[{name:'玄凪会の門番',variant:'enforcer_b',persona:'guard'},{name:'玄凪会の構成員',variant:'enforcer_a',persona:'brute'},{name:'玄凪会の若衆',variant:'wanderer',persona:'coward'}];
+  m.showBranchGuards=()=>{
+    m.clearStoryCast();m.stageBranch();
+    const at=m.branchMark(0,1.9);
+    m.storyCast=actors([at.x,at.z],guards);m.storyCast.fixed=true;
+    m.syncStoryCast();
+  };
+  m.SCENES.branch_intro=[
+    beat(hero,'柊に会いに来た。ここにいるんだろう。',{do:m.showBranchGuards,rig:m.branchEntranceShot}),
+    beat('玄凪会の門番','何だ、てめえ。誰の許可で来た。'),
+    beat(hero,'本人に聞けば分かる。渋沢が来たと伝えてくれ。'),
+    beat('玄凪会の門番','帰れ。これ以上、近づくな。'),
+    beat(hero,'帰るつもりはない。柊を呼べ。'),
+    beat('玄凪会の門番','……おい、お前ら。こいつを追い払え！',{stamp:'喧'})
+  ];
+  m.showHiiragi=()=>{
+    m.clearStoryCast();m.stageBranch();m.resetBranchEntrance();
+    const at=m.branchMark(0,.25);
+    m.storyCast=actors([at.x,at.z],[{name:'柊 誠司',variant:'hiiragi',idle:'walk'}]);m.storyCast.fixed=true;
+    m.syncStoryCast();
+    const actor=m.storyCast._npcs?.[0];if(actor)m._hiiragiWalk={actor,t:0};
+  };
+  m.SCENES.hiiragi_reunion=[
+    {t:3.5,do:m.showHiiragi,rig:m.branchEntranceShot},
+    beat(hero,'……柊。',{do:()=>reveal('reunion')}),
+    beat('柊 誠司','久しぶりだな、渋沢。'),
+    beat(hero,'ハチ公で待ち合わせたはずだ。あいつを襲わせたのは、お前の命令なのか。'),
+    beat('柊 誠司','……声を落とせ。'),
+    beat(hero,'十年前の真相を話すんだろう。俺は、そのために来た。')
+  ];
+  // Preload the approved cast scan; never instantiate a procedural stand-in while it loads.
+  m.prepareHiiragi=()=>{
+    if(m._hiiragiLoading)return;
+    m._hiiragiLoading=true;
+    const hm=m.engine.get('humanoid');
+    Promise.resolve(hm?.castScansReady?.('hiiragi')).then(()=>{
+      m._hiiragiLoaded=!hm?.castScanReady || hm.castScanReady('hiiragi');
+      if(!m._hiiragiLoaded)m.showMsg('読み込み待ち','柊のモデルを読み込めませんでした。再読み込みすると再会直前から再開できます。');
+    }).catch(()=>{m.showMsg('読み込み待ち','再読み込みして、再会直前の保存から続けてください。');});
+  };
+  m.finishClub=()=>{m.clearStoryCast();m.setStep(8);m.prepareHiiragi();};
   m.startChapterFight=(kind)=>{
     m.clearStoryCast();
     const en=m.engine.get('enemy');en.clear();
     const p=m.engine.player;
     m.engine.get('player').respawn(p.position.clone(),p.yaw);
     m.fightCtx=kind;m.hits=0;m.bestCombo=0;m.fightYen=0;m.kos=0;m.fightT=0;
-    const defs=kind==='host'?[{name:'キャッチのホスト',variant:'nightlife_king',persona:'guard'}]:club;
-    const list=defs.map((d,i)=>{const a=p.yaw+(i-(defs.length-1)/2)*.55;const at=p.position.clone().add(new THREE.Vector3(Math.sin(a)*4,0,Math.cos(a)*4));at.y=m.groundAt(at.x,at.z);const e=en.spawn('chinpira',at,{...d,aggro:true,ownClothes:true});en.go(e,'approach');return e;});
-    m.setStep(kind==='host'?5:7);m.engine.state.mode='combat';m.engine.events.emit('combat:start',{enemies:list});
+    const defs=kind==='host'?[{name:'キャッチのホスト',variant:'nightlife_king',persona:'guard'}]:kind==='branch'?guards:club;
+    const list=defs.map((d,i)=>{const a=p.yaw+(i-(defs.length-1)/2)*.55;const at=kind==='branch'?m.branchMark(-1-i*1.3,2.8):p.position.clone().add(new THREE.Vector3(Math.sin(a)*4,0,Math.cos(a)*4));at.y=m.groundAt(at.x,at.z);const e=en.spawn('chinpira',at,{...d,aggro:true,ownClothes:true});en.go(e,'approach');return e;});
+    m.setStep(kind==='host'?5:kind==='branch'?9:7);m.engine.state.mode='combat';m.engine.events.emit('combat:start',{enemies:list});
   };
-  m.finishHachiko=()=>{m.clearStoryCast();reveal('junior');reveal('gang');reveal('hiiragi_whereabouts');m.setStep(4);};
-  m.finishChapter=()=>{m.clearStoryCast();m.setStep(3);m.notice('第一章 完了','拳の向こう側',3.6);};
-  m.chapterSceneEnd={epilogue:m.finishHachiko,host_intro:()=>m.startChapterFight('host'),host_payment:()=>m.playClubEntrance(),club_intro:()=>m.startChapterFight('club'),club_outro:m.finishChapter};
+  m.finishHachiko=()=>{m.clearStoryCast();reveal('junior');reveal('gang');reveal('assault_order');reveal('hiiragi_whereabouts');m.setStep(4);};
+  m.finishChapter=()=>{m.clearStoryCast();m.resetBranchEntrance();m.setStep(3);m.notice('第一章 完了','十年ぶりの再会',3.6);};
+  m.chapterSceneEnd={epilogue:m.finishHachiko,host_intro:()=>m.startChapterFight('host'),host_payment:()=>m.playClubEntrance(),club_intro:()=>m.startChapterFight('club'),club_outro:m.finishClub,branch_intro:()=>m.startChapterFight('branch'),hiiragi_reunion:m.finishChapter};
   // Existing developer cutscene links run the real sequence without enabling saves.
   m.prepareChapterPreview=name=>{
     if(!Object.hasOwn(m.chapterSceneEnd,name))return false;
-    if(name==='epilogue')m.stageHachiko();
+    if(name==='hiiragi_reunion'){m.stageBranch();m.setStep(10);m.prepareHiiragi();return true;}
+    if(name==='branch_intro'){m.stageBranch();m.setStep(9);m.prepareHiiragi();}
+    else if(name==='epilogue')m.stageHachiko();
     else {m.engine.get('player').respawn(center.clone().add(new THREE.Vector3(0,0,4)),Math.PI);if(name==='host_payment')m.showStoryCast('host');}
     m.startScene=name;m.startAt=.6;return true;
   };
   const previousEnd=m.onCombatEnd.bind(m);
   m.onCombatEnd=()=>{
     const ctx=m.fightCtx;
-    if(!['main','host','club'].includes(ctx)){previousEnd();return;}
+    if(!['main','host','club','branch'].includes(ctx)){previousEnd();return;}
     m.fightCtx=null;
     m.showResults(()=>{
       m.engine.get('enemy').clear();
       if(ctx==='main')m.play('epilogue',m.finishHachiko);
       if(ctx==='host'){m.showStoryCast('host');m.setStep(6);m.engine.get('menus')?.front?.save();m.play('host_payment',()=>m.playClubEntrance());}
-      if(ctx==='club')m.play('club_outro',m.finishChapter);
+      if(ctx==='club')m.play('club_outro',m.finishClub);
+      if(ctx==='branch'){m.engine.state.mode='explore';m.setStep(10);m.engine.get('menus')?.front?.save();m.prepareHiiragi();}
     });
   };
   m.playClubEntrance=()=>{
@@ -175,6 +224,8 @@ export function installDoubleDragon(m, THREE) {
     const p=m.engine.player.position;
     if(m.index===4 && p.distanceTo(center)<5){m.setStep(5);m.play('host_intro',()=>m.startChapterFight('host'));}
     else if(m.index===6){m.playClubEntrance();}
+    else if(m.index===8){m.prepareHiiragi();if(p.distanceTo(m.STEPS[8].pos)<5){m.setStep(9);m.play('branch_intro',()=>m.startChapterFight('branch'));}}
+    else if(m.index===10){m.prepareHiiragi();if(m._hiiragiLoaded)m.play('hiiragi_reunion',m.finishChapter);}
   };
   // The old optional host quest is now a mandatory story encounter.
   const old=m.SUBSTORIES.find(s=>s.id==='tout');if(old)old.done=true;

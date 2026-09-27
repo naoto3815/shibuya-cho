@@ -29,6 +29,7 @@
 import * as THREE from 'three';
 import * as HUM from '../characters/humanoid.js';
 import { getClip, CLIPS } from '../characters/animations.js';
+import { crumb } from '../core/mobileProfile.js';
 
 const QS = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams('');
 export const CROWD_LEGACY = QS.get('crowdLegacy') === '1';
@@ -51,6 +52,10 @@ const ALB_N = 256;                               // mirror albedo layer size
 // ids 0..4, frames per cycle. 'brisk' (2026-09-26) is the walk clip with the legs left at its full 2.4 m/s stride (TUNE[4]):
 // a quicker pace is a LONGER stride first (the instance blends walk -> brisk), a quicker step only up to a human cadence
 const CLIP_WANT = [['walk', 24], ['idle', 24], ['run', 16], ['look', 24], ['brisk', 16, 'walk']];
+// [mobile] ?vatK=<0..1> scales every clip's frame count, ?vatClips=walk,idle,... bakes only those (the rest fall back to walk /
+// idle, as a missing clip always did): the VAT textures are scans x vertices x frames x 8 bytes, baked at load
+const VAT_K = Number(QS.get('vatK')) > 0 && Number(QS.get('vatK')) < 1 ? Number(QS.get('vatK')) : 1;
+const VAT_CLIPS = QS.get('vatClips') ? new Set(QS.get('vatClips').split(',')) : null;
 const RUN_ON = 3.3, RUN_OFF = 2.9;               // m/s: the run clip is a sprint (5.6 m/s); a hurry stays a brisk walk
 // Step length (m) against walking pace (m/s) for a 1.75 m adult, scaled by height: the gait's stride is chosen from it
 // and the cadence follows (1.3 m/s -> 0.69 m steps at 1.9 steps/s; 2.3 m/s -> 0.91 m at 2.5). Human gait data, rounded.
@@ -223,6 +228,7 @@ export class CrowdScan {
   // ---------------------------------------------------------------------------------------------- prepare (async)
   async prepare() {
     const T0 = performance.now();
+    crumb('crowd', 'wait scans');
     const keys = await this.src.ready();
     if (Array.isArray(keys)) this.src.scans = this.src.scans.filter((s) => keys.includes(s.key));
     this.src.all = HUM.PED_SCANS && this.src.kind === 'ped' ? HUM.PED_SCANS.length : this.src.scans.length;
@@ -233,6 +239,7 @@ export class CrowdScan {
     this.slice = performance.now();
     const bodies = [];
     for (let s = 0; s < this.src.scans.length; s++) {
+      crumb('crowd', `bake ${s + 1}/${this.src.scans.length} ${this.src.scans[s].key}`);   // [mobile] boot breadcrumb
       try { bodies[s] = await this.bakeScan(s); }
       catch (e) { console.warn(`[crowdScan] ${this.src.scans[s].key}: not baked (${e.message})`); this.S[s] = null; }
     }
@@ -241,10 +248,10 @@ export class CrowdScan {
     for (const p of this.crowd.peds) if (!this.S[p.sk]) p.sk = ok[p.index % ok.length];
     for (const p of this.crowd.peds) this.keyPed(p);
     this.root = new THREE.Group(); this.root.name = 'crowdScan'; this.engine.scene.add(this.root);
-    this.buildTiers();
-    await this.buildMirror();
+    crumb('crowd', 'tiers'); this.buildTiers();
+    crumb('crowd', 'mirror'); await this.buildMirror();
     this.buildDecals();
-    await this.buildPool(bodies);
+    crumb('crowd', 'pool'); await this.buildPool(bodies);
     for (const S of this.S) if (S) { S.parts = null; }
     this.stat.bakeMs = performance.now() - T0;
     // compile the new programs off the frame (parallel compile), not on the first frame that shows them
@@ -270,8 +277,9 @@ export class CrowdScan {
     let base = 0;
     const defs = [];
     for (let id = 0; id < CLIP_WANT.length; id++) {
-      const [name, F, from] = CLIP_WANT[id], cn = from || name;
-      const clip = cn === 'walk' || cn === 'idle' || CLIPS.includes(cn) ? getClip(cn) : null;
+      const [name, F0, from] = CLIP_WANT[id], cn = from || name, F = Math.max(6, Math.round(F0 * VAT_K));
+      const want = !VAT_CLIPS || VAT_CLIPS.has(name) || name === 'walk' || name === 'idle';
+      const clip = want && (cn === 'walk' || cn === 'idle' || CLIPS.includes(cn)) ? getClip(cn) : null;
       if (!clip) { defs.push(null); continue; }
       defs.push({ id, name, clip, F, base, dur: clip.duration, stride: (clip.userData && clip.userData.stride) || null });
       base += F;

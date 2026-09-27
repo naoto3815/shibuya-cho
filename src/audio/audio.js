@@ -1590,10 +1590,13 @@ function battleNotes(ctx, B, t, s, bar, cycle, part = 'all') {
  *  render a 4-bar, 7.5 s loop in three OfflineAudioContexts on the main thread at boot. The decoder's delay (0 if
  *  the demuxer honours the m4a's priming edit, as Chrome's and Apple's do) is measured once from bar 1 beat 1's
  *  first transient against the onset bake.mjs recorded, and every loop point is shifted by it. */
+// [mobile] ?audio=lite (the phone profile): only the drums and the lead are decoded — decoded audio is float32, and the four
+// stems were ~115 MB of it — the harmony and intensity layers are one silent sample (their loops play nothing)
+const AUDIO_LITE = typeof location !== 'undefined' && new URLSearchParams(location.search).get('audio') === 'lite';
 async function loadStems(ctx) {
   const man = await fetch(SFX_URL('battle.json')).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
-  const bufs = await Promise.all(STEM_NAMES.map(k => fetch(SFX_URL(man.files[k]))
-    .then(r => { if (!r.ok) throw new Error(`${man.files[k]} ${r.status}`); return r.arrayBuffer(); }).then(ab => decodeWith(ctx, ab))));
+  const bufs = await Promise.all(STEM_NAMES.map(k => (AUDIO_LITE && (k === 'harm' || k === 'intensity') ? Promise.resolve(ctx.createBuffer(2, 1, ctx.sampleRate)) : fetch(SFX_URL(man.files[k]))
+    .then(r => { if (!r.ok) throw new Error(`${man.files[k]} ${r.status}`); return r.arrayBuffer(); }).then(ab => decodeWith(ctx, ab)))));
   const d = bufs[0], sr = d.sampleRate, c0 = d.getChannelData(0), c1 = d.numberOfChannels > 1 ? d.getChannelData(1) : c0;
   const P = man.preroll, lo = Math.max(0, Math.floor((P - 0.05) * sr)), hi = Math.min(c0.length, Math.floor((P + 0.1) * sr));
   let mx = 0; for (let i = lo; i < hi; i++) mx = Math.max(mx, Math.abs(c0[i]), Math.abs(c1[i]));
@@ -1690,7 +1693,11 @@ const audio = {
     try {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return false;
-      const ctx = this.ctx = new AC({ latencyHint: 'interactive' });
+      // [mobile] ?audio=lite: a 22.05 kHz context — every decoded buffer at half the float32 memory of 44.1 / 48 kHz
+      let ctx = null;
+      if (AUDIO_LITE) { try { ctx = new AC({ latencyHint: 'interactive', sampleRate: 22050 }); } catch (e) { ctx = null; } }
+      if (!ctx) ctx = new AC({ latencyHint: 'interactive' });
+      this.ctx = ctx;
 
       // The master chain deliberately splits. A glue compressor across EVERYTHING flattens impacts: Chrome's
       // DynamicsCompressor reacts inside the ~30 ms a punch lives in and eats ~19 dB of it (measured — see

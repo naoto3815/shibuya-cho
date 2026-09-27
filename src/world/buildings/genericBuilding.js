@@ -10,6 +10,7 @@
 import * as THREE from 'three';
 import * as L from './lib.js';
 import { SHOP_TENANTS, TENANT_TYPE } from './tenantsData.js';
+import { CANVAS_K } from '../../core/mobileProfile.js';
 
 export const STOREY_H = 3.4;
 
@@ -670,9 +671,11 @@ class FasciaAtlas {
     // 480 cells of 512 × 44 (was 320 of 512 × 64): room for the real tenants' names (tenantsData.js) at +3 % texels;
     // 44 px over a 0.82 m board ≈ the 57 px/m the 512 px give along a 9 m fascia
     this.W = 4096; this.H = 2640; this.cw = 512; this.ch = 44; this.cols = 8; this.rows = 60;
-    this.canvas = L.makeCanvas(this.W, this.H); this.ctx = this.canvas.getContext('2d');
+    // [mobile] ?canvasK: painted at that scale through the context's transform (same cells, same UVs, a quarter the memory)
+    this.canvas = L.makeCanvas(Math.round(this.W * CANVAS_K), Math.round(this.H * CANVAS_K)); this.ctx = this.canvas.getContext('2d');
+    if (CANVAS_K !== 1) this.ctx.scale(CANVAS_K, CANVAS_K);
     this.ctx.fillStyle = '#222'; this.ctx.fillRect(0, 0, this.W, this.H);
-    this.tex = L.canvasTex(this.canvas, { aniso: 8 });
+    this.tex = L.canvasTex(this.canvas, { aniso: 8, live: true });
     this.mat = new THREE.MeshStandardMaterial({ map: this.tex, emissiveMap: this.tex, emissive: 0xffffff, emissiveIntensity: 1.0, roughness: 0.45, metalness: 0.05 });
     this.mat.name = 'gb_fascia';
     emissives.push({ mat: this.mat, day: 0.15, night: 0.88 });

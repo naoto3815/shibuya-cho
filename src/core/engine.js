@@ -14,7 +14,7 @@ export function createEngine({ canvas, seed = 1 } = {}) {
   renderer.outputColorSpace = THREE.SRGBColorSpace;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.0;
-  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.enabled = new URLSearchParams(location.search).get('shadow') !== '0';   // ?shadow=0 (the phones' safe tier): none
   renderer.shadowMap.type = THREE.PCFShadowMap; // r186 removed PCFSoftShadowMap (falls back to PCF); lighting sets shadow.radius
   // Render resolution. Two ratios:
   //   the CANVAS ratio (renderer.setPixelRatio) — fixed for the session. The composer used to render at 1.25 while
@@ -45,7 +45,9 @@ export function createEngine({ canvas, seed = 1 } = {}) {
   // bitmap down at upload (WebGLTextures.resizeImage); the procedural 2048-4096 atlases are most of the GPU memory.
   // (the scans' bitmaps are fitted at decode instead, humanoid.js loadTex: redrawn into a canvas they would obey flipY)
   // Its per-texture "has been resized" warning is expected here, so it is counted instead of logged.
-  const texMaxQ = Number(QS.get('texmax'));
+  // (a scan's bitmap may be allowed more than the procedural cap — ?heroTex — and must never be resized here: redrawn into a
+  // canvas it would obey flipY where the bitmap did not; so the upload cap is the larger of the two)
+  const texMaxQ = Math.max(Number(QS.get('texmax')) || 0, Number(QS.get('heroTex')) || 0, Number(QS.get('scanTex')) || 0) || NaN;
   if (isFinite(texMaxQ) && texMaxQ >= 256 && texMaxQ < renderer.capabilities.maxTextureSize) {
     renderer.capabilities.maxTextureSize = texMaxQ | 0;
     const prevLog = THREE.getConsoleFunction();
@@ -95,7 +97,7 @@ export function createEngine({ canvas, seed = 1 } = {}) {
   };
   const events = createEvents();
   // ?texmax: the big canvases behind the capped textures are let go once the game is up (mobileProfile.js)
-  if (texCompact) events.on('engine:ready', () => { try { compactCanvasTextures(engine, texMaxQ | 0); } catch (e) { logOnce('engine', 'compactCanvasTextures', e); } });
+  if (texCompact) events.on('engine:ready', () => { try { compactCanvasTextures(engine, (Number(QS.get('texmax')) || texMaxQ) | 0); } catch (e) { logOnce('engine', 'compactCanvasTextures', e); } });
   const rng = createRng(seed);
   const input = createInput(canvas);
 
@@ -366,8 +368,11 @@ export function createEngine({ canvas, seed = 1 } = {}) {
     input.update();
     for (const mod of order) mod.__safeUpdate(dt, t);
 
+    // [mobile] engine.skipRender(frame) -> true skips drawing this frame (the phone warm-up in mobileProfile.js: nothing is
+    // drawn behind the opaque title / video, while textures upload and programs compile a few per frame instead)
     const pf = engine.systems.get('postfx');
-    if (pf && typeof pf.render === 'function' && !pf.__initError) {
+    if (typeof engine.skipRender === 'function' && engine.skipRender(frameCount)) { /* not drawn */ }
+    else if (pf && typeof pf.render === 'function' && !pf.__initError) {
       try { pf.render(dt); } catch (e) { logOnce('postfx', 'render', e); renderer.render(scene, camera); }
     } else {
       renderer.render(scene, camera);
@@ -391,9 +396,10 @@ export function createEngine({ canvas, seed = 1 } = {}) {
     stats.geometries = renderer.info.memory.geometries;
     stats.programs = renderer.info.programs ? renderer.info.programs.length : 0;
     stats.frame = frameCount;
-    if (frameCount === 4 && QS.get('precompile') !== '0') {
+    if (frameCount === 4 && QS.get('precompile') !== '0' && !engine.skipRender) {   // (a phone warms up in slices instead)
       const n0 = renderer.info.programs ? renderer.info.programs.length : 0;
-      precompile(scene).then((r) => { if (r) console.info(`[engine] precompiled ${(renderer.info.programs ? renderer.info.programs.length : 0) - n0} programs (${r.sync.toFixed(0)} ms on the frame, ${r.total.toFixed(0)} ms in the background)`); });
+      events.emit('precompile:start', 'scene');
+      precompile(scene).then((r) => { events.emit('precompile:end'); if (r) console.info(`[engine] precompiled ${(renderer.info.programs ? renderer.info.programs.length : 0) - n0} programs (${r.sync.toFixed(0)} ms on the frame, ${r.total.toFixed(0)} ms in the background)`); });
     }
     govUpdate(raw);
     stats.res = gov.pr;

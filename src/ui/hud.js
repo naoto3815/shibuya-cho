@@ -5,6 +5,7 @@
 //   hud.el.stamp — the stamp node; combat/camera/heatActions move it (left/top) and pause it (animationDelay/PlayState).
 import * as THREE from 'three';
 import { CITY, pointInPolygon } from '../world/cityData.js';
+import { MOBILE } from '../core/mobileProfile.js';
 
 const _v = new THREE.Vector3(), _w = new THREE.Vector3(), _d = new THREE.Vector3(), _h1 = new THREE.Vector3(), _h2 = new THREE.Vector3();
 // "SC *" are the @font-face aliases in hud.css (installed faces per OS); the rest is the plain fallback chain
@@ -738,7 +739,7 @@ const hud = {
 
   setupMinimap() {
     const cv = this.el.minimap;
-    this.mapDpr = Math.min(2, window.devicePixelRatio || 1);
+    this.mapDpr = Math.min(MOBILE ? 1 : 2, window.devicePixelRatio || 1);   // [mobile] the minimap is drawn at half size on a phone
     cv.width = cv.height = Math.round(MM.box * this.mapDpr);
     this.mapCtx = cv.getContext('2d');
     this.mapT = 0; this.areaT = 0; this._mapRetry = 0;

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import * as L from './lib.js';
 import { getAtlases, shopUV, shopQuad, railAlong, ductRun, shopFrontDepth, claimRealTenant, realCountAlong, registerShopBay } from './genericBuilding.js';
 import { TENANT_TYPE } from './tenantsData.js';
+import { CANVAS_K } from '../../core/mobileProfile.js';
 
 const nightMats = [];   // [{mat, day, night}]
 let M = null;
@@ -397,12 +398,14 @@ export function wrapSign(group, { cx, cz, r, y0, y1, th0, th1, text, sub = null,
 // Every flat landmark sign / poster / vertical blade is painted into one shared 4096² canvas and emitted as quads into
 // the city batch (bloom layer through mat.userData.layer), so ~150 signs cost a handful of draw calls instead of one
 // mesh + one texture each. Two materials: lit (emissive follows the night factor) and dim (plaques, unlit boards).
+// [mobile] ?canvasK (mobileProfile.js CANVAS_K): on a phone the atlas and every sign in it are painted at that scale
+// (4096 -> 2048 at 0.5): the same signs per atlas, the same UVs, a quarter of the memory
 class SignAtlas {
-  constructor(size = 4096) {
+  constructor(size = Math.round(4096 * CANVAS_K)) {
     this.size = size; this.pad = 4;
     this.canvas = L.makeCanvas(size, size); this.ctx = this.canvas.getContext('2d');
     this.ctx.fillStyle = '#101010'; this.ctx.fillRect(0, 0, size, size);
-    this.tex = L.canvasTex(this.canvas, { aniso: 8 });
+    this.tex = L.canvasTex(this.canvas, { aniso: 8, live: true });
     this.shelves = [];   // [{y, h, x}]
     this.top = 0;
     this.full = false;
@@ -420,11 +423,12 @@ class SignAtlas {
   }
   /** Draw a textCanvas into the atlas, return the uv rect [u0,v0,u1,v1] (v up). */
   put(opts, w, h, ppm) {
-    const W = Math.min(1024, Math.max(48, Math.round(w * ppm))), H = Math.min(opts.vertical ? 1024 : 320, Math.max(24, Math.round(h * ppm)));
+    const K = CANVAS_K, W = Math.min(1024 * K, Math.max(48 * K, Math.round(w * ppm * K))) | 0, H = Math.min((opts.vertical ? 1024 : 320) * K, Math.max(24 * K, Math.round(h * ppm * K))) | 0;
     const cell = this.alloc(W, H);
     if (!cell) return null;
     const c = L.textCanvas({ ...opts, w: W, h: H });
     this.ctx.drawImage(c, cell.x, cell.y);
+    if (CANVAS_K !== 1) c.width = c.height = 1;        // [mobile] a phone lets the scratch canvas go now, not at the next GC
     this.tex.needsUpdate = true;
     const s = this.size, i = 1.5;
     return [(cell.x + i) / s, 1 - (cell.y + H - i) / s, (cell.x + W - i) / s, 1 - (cell.y + i) / s];

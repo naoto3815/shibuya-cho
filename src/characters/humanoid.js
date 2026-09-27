@@ -3539,9 +3539,11 @@ const HUM_TIME = typeof location !== 'undefined' && location.search.includes('hu
 // [mobile] ?texmax=<px> (the mobile profile's 1024): a map bigger than that becomes a smaller BITMAP here. three's own
 // upload-time resize (engine.js) would redraw it into a canvas, and a canvas obeys flipY where a bitmap does not —
 // measured: the hero's suit came out in patches. Resized as a bitmap it keeps exactly the orientation it had.
-// ?pedTex=<px> caps the passers-by's maps lower still (the mobile profile's 512: they are small on a phone's screen).
-const TEX_MAX = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('texmax')) || 0 : 0;
-const PED_TEX = typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get('pedTex')) || 0 : 0;
+// ?scanTex / ?pedTex / ?heroTex=<px> cap the enemies' & cast's / the passers-by's / the hero's maps (mobileProfile.js tiers:
+// the passers-by are small on a phone's screen, the hero is on it all the time). Each falls back to ?texmax.
+const TQ = (k) => (typeof location !== 'undefined' ? Number(new URLSearchParams(location.search).get(k)) || 0 : 0);
+const TEX_MAX = TQ('texmax'), PED_TEX = TQ('pedTex') || TEX_MAX, SCAN_TEX = TQ('scanTex') || TEX_MAX, HERO_TEX = TQ('heroTex') || TEX_MAX;
+const texCap = (url) => (url.startsWith('assets/peds/') ? PED_TEX : url.startsWith('assets/hero/') ? HERO_TEX : SCAN_TEX);
 async function fitBitmap(bmp, cap = TEX_MAX) {
   const m = Math.max(bmp.width, bmp.height);
   if (!(cap >= 128) || m <= cap) return bmp;
@@ -3557,12 +3559,40 @@ async function fitBitmap(bmp, cap = TEX_MAX) {
   bmp.close();
   return small;
 }
+// [mobile] with a cap, the image is decoded straight at its capped size (the header gives its dimensions: no full-size
+// 2048² decode first — 16 MB each, and a scan brings three or four) and at most two decodes run at once
+function imageDims(u) {
+  if (u[0] === 0x89 && u[1] === 0x50) return [(u[16] << 24 | u[17] << 16 | u[18] << 8 | u[19]) >>> 0, (u[20] << 24 | u[21] << 16 | u[22] << 8 | u[23]) >>> 0];
+  if (u[0] !== 0xFF || u[1] !== 0xD8) return null;
+  for (let i = 2; i + 9 < u.length;) {
+    if (u[i] !== 0xFF) { i++; continue; }
+    const m = u[i + 1];
+    if (m >= 0xC0 && m <= 0xCF && m !== 0xC4 && m !== 0xC8 && m !== 0xCC) return [u[i + 7] << 8 | u[i + 8], u[i + 5] << 8 | u[i + 6]];
+    if (m === 0xD8 || m === 0x01 || (m >= 0xD0 && m <= 0xD7)) { i += 2; continue; }
+    i += 2 + (u[i + 2] << 8 | u[i + 3]);
+  }
+  return null;
+}
+let decodes = 0; const decodeQ = [];
+const decodeSlot = () => (!TEX_MAX || decodes < 2 ? (decodes++, Promise.resolve()) : new Promise((res) => decodeQ.push(res)).then(() => { decodes++; }));
+const decodeDone = () => { decodes--; const n = decodeQ.shift(); if (n) n(); };
 async function loadTex(url) {
   if (typeof createImageBitmap !== 'function') return new THREE.TextureLoader().loadAsync(url);
   const r = await fetch(url); if (!r.ok) throw new Error(url + ' ' + r.status);
   const blob = await r.blob();
   if (HUM_TIME) console.info('[humanoid] t', Math.round(performance.now()), url, 'fetched');
-  const bmp = await fitBitmap(await createImageBitmap(blob, { imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' }), PED_TEX >= 128 && url.startsWith('assets/peds/') ? PED_TEX : TEX_MAX);
+  const opt = { imageOrientation: 'none', premultiplyAlpha: 'none', colorSpaceConversion: 'none' }, cap = texCap(url);
+  let bmp;
+  await decodeSlot();
+  try {
+    let dims = null;
+    if (cap >= 128) { try { dims = imageDims(new Uint8Array(await blob.slice(0, 65536).arrayBuffer())); } catch (e) { dims = null; } }
+    if (dims && Math.max(dims[0], dims[1]) > cap) {
+      const k = cap / Math.max(dims[0], dims[1]);
+      bmp = await createImageBitmap(blob, { ...opt, resizeWidth: Math.max(1, Math.round(dims[0] * k)), resizeHeight: Math.max(1, Math.round(dims[1] * k)), resizeQuality: 'medium' });
+    } else bmp = await createImageBitmap(blob, opt);
+    bmp = await fitBitmap(bmp, cap);                 // (no-op when the decode already obeyed the size)
+  } finally { decodeDone(); }
   if (HUM_TIME) console.info('[humanoid] t', Math.round(performance.now()), url, 'decoded');
   const t = new THREE.Texture(bmp);
   t.needsUpdate = true;

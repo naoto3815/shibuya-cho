@@ -685,9 +685,11 @@ const lighting = {
     }
     // [mobile] ?shadowEvery=<n>: the near cascade renders every n-th frame (the far one every 2n-th, off the near's frames);
     // a map a frame old stays consistent for the same reason the far one does. The mobile profile's 2.
+    // (a map that does not exist yet is always drawn: a phone draws nothing behind its title, and the first frame it does
+    // draw must not sample a missing shadow map — GL_INVALID_OPERATION, the draw dropped)
     const E = SHADOW_EVERY, odd = (this._frame % (2 * E)) === 1;
-    L[0].shadow.needsUpdate = E === 1 || (this._frame % E) === 0;
-    for (let i = 1; i < L.length; i++) L[i].shadow.needsUpdate = day && odd;
+    L[0].shadow.needsUpdate = E === 1 || (this._frame % E) === 0 || !L[0].shadow.map;
+    for (let i = 1; i < L.length; i++) L[i].shadow.needsUpdate = (day && odd) || !L[i].shadow.map;
   },
 
   selfTest() {

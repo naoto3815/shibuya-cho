@@ -6,7 +6,7 @@
 // Modules are loaded with dynamic import() so that a module with a syntax error or a missing default export
 // (e.g. one that is mid-rewrite by its owner) is replaced by an inert stub and logged, instead of taking the
 // whole game down. The engine additionally isolates init/update failures per module.
-import './core/mobileProfile.js';   // [mobile] first: writes the phone profile's switches into the URL before any module reads it
+import { attachBreadcrumbs, crumb } from './core/mobileProfile.js';   // [mobile] first: the phone profile's switches go into the URL before any module reads it
 import { createEngine } from './core/engine.js';
 import shots, { applyParams } from './debug/shots.js';
 
@@ -50,10 +50,12 @@ const bootProgress = (k) => {
 
 const canvas = document.getElementById('game');
 const engine = createEngine({ canvas, seed: 1 });
+attachBreadcrumbs(engine);   // [mobile] boot stages -> localStorage (phones only)
 
 let nLoaded = 0;
 const loaded = await Promise.all(MODULES.map(([name, path]) => loadModule(name, path).then((m) => {
   bootProgress((0.05 * ++nLoaded) / MODULES.length);
+  crumb('import', `${nLoaded}/${MODULES.length} ${name}`);
   return m;
 })));
 // the inits take 5–88 % of the bar in proportion to how long each one runs (ms, measured at 1920×1080 @2x on the
