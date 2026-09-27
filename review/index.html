@@ -8,21 +8,21 @@
 :root{color-scheme:dark;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Yu Gothic",sans-serif;background:#111319;color:#eee}*{box-sizing:border-box}body{margin:0;padding:28px 18px calc(32px + env(safe-area-inset-bottom))}main{max-width:900px;margin:auto}header{border-bottom:1px solid #48433a;padding-bottom:22px;margin-bottom:24px}.eyebrow{color:#d7bd83;font-size:12px;letter-spacing:.14em}h1{font-size:clamp(25px,5vw,38px);margin:12px 0;line-height:1.4}h2{font-size:19px;margin:28px 0 12px}p{line-height:1.85;margin:10px 0}.muted{color:#b4b8c0;font-size:14px}.player{border:1px solid #4b4435;border-radius:14px;overflow:hidden;background:#050607}video{display:block;width:100%;aspect-ratio:16/9;background:#000}.now{padding:13px 16px;color:#e6cf9c;min-height:54px;border-top:1px solid #39352d;font-size:14px}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:16px 0}.step{background:#1c2029;border:1px solid #323846;border-radius:12px;padding:16px}.step b{display:block;color:#d7bd83;margin-bottom:8px}.step span{font-size:14px;line-height:1.6;display:block}.compare{display:grid;grid-template-columns:1fr 1fr;gap:12px}.compare section{border-left:2px solid #665b42;padding:4px 16px}a{color:#e6cf9c;text-underline-offset:4px}.download{display:inline-block;padding:14px 18px;background:#242a35;border:1px solid #586073;border-radius:9px;margin:12px 0;min-height:48px}footer{border-top:1px solid #343946;margin-top:30px;padding-top:18px;font-size:13px;color:#aaa;line-height:1.8}@media(max-width:540px){body{padding-top:22px}.steps{grid-template-columns:1fr}.step{display:grid;grid-template-columns:80px 1fr;padding:14px;gap:12px}.step b{margin:0}.compare{grid-template-columns:1fr}h2{margin-top:24px}}
 </style>
 </head><body><main>
-<header><div class="eyebrow">TWIN DRAGON / UPDATE 2026.09.27 · 02</div><h1>渋谷上空から、<br>渋沢のもとへ。</h1><p class="muted">変更後のゲーム画面を収録しました。再生ボタンを押すと、スマホでも演出の流れを確認できます。</p></header>
-<div class="player"><video id="preview" controls playsinline preload="metadata" aria-label="変更後の渋谷降下演出" src="city-arrival-v2.mp4"></video><div id="now" class="now">再生して、変更後のカメラの動きを確認</div></div>
+<header><div class="eyebrow">TWIN DRAGON / UPDATE 2026.09.27 · 03</div><h1>渋谷上空から、<br>渋沢のもとへ。</h1><p class="muted">変更後のゲーム画面を収録しました。再生ボタンを押すと、スマホでも演出の流れを確認できます。</p></header>
+<div class="player"><video id="preview" controls playsinline preload="metadata" aria-label="変更後の渋谷降下演出" src="city-arrival-v3.mp4"></video><div id="now" class="now">再生して、変更後のカメラの動きを確認</div></div>
 <button id="play" class="download" type="button" style="color:#e6cf9c;font:inherit;cursor:pointer">演出を再生</button>
-<p class="muted">約18秒・無音の確認動画です。見やすい昼の状態で収録しています。本編の夜の演出とは明るさが異なります。横向き・全画面でも確認できます。</p>
-<a class="download" href="city-arrival-v2.mp4">動画だけを開く</a>
+<p class="muted">約11秒・無音の確認動画です。見やすい昼の状態で収録しています。本編の夜の演出とは明るさが異なります。横向き・全画面でも確認できます。</p>
+<a class="download" href="city-arrival-v3.mp4">動画だけを開く</a>
 <h2>今回変えたところ</h2>
-<div class="compare"><section><b>変更前</b><p>ほぼ真上から、そのまま地上へ降下。街の広がりは見えますが、実景の斜め俯瞰とは角度が異なっていました。</p></section><section><b>変更後</b><p>高空から街全体を見せ、SHIBUYA SKY側の斜め俯瞰を経由。交差点へ近づいてから、渋沢のカメラへつなぎます。</p></section></div>
-<div class="steps"><div class="step"><b>01 · 全景</b><span>約650mの高さから<br>渋谷の街の配置を見せる</span></div><div class="step"><b>02 · 接近</b><span>約229m相当の斜め俯瞰へ<br>交差点の位置関係を見せる</span></div><div class="step"><b>03 · 開始</b><span>渋沢へ寄り、追従カメラへ<br>演出終了後に操作を開始</span></div></div>
-<p>カメラ演出は約14秒。最後までの移行とスキップ動作をPCブラウザーで確認しています。</p>
+<div class="compare"><section><b>変更前</b><p>約650mの高空から始まり、まだ作り込みが十分でない街の外周まで見えていました。</p></section><section><b>変更後</b><p>前の確認動画の7秒地点から開始。交差点と駅前が見える斜め俯瞰から、渋沢へ近づきます。本編も高空の導入を省きました。</p></section></div>
+<div class="steps"><div class="step"><b>01 · 交差点</b><span>前の動画の7秒地点から<br>交差点を見下ろして開始</span></div><div class="step"><b>02 · 接近</b><span>ハチ公前へ近づき<br>主人公の姿を見せる</span></div><div class="step"><b>03 · 開始</b><span>渋沢へ寄り、追従カメラへ<br>演出終了後に操作を開始</span></div></div>
+<p>本編のカメラ演出は約8秒＋追従への移行。確認動画は前回の録画の冒頭7秒をカットしたものです。最後までの移行とスキップ動作をPCブラウザーで確認しています。</p>
 <p class="muted">今回の変更はカメラの構図と経路です。街の建物や質感の作り直しは含みません。スマートフォン実機でゲーム全体を検証済みという意味ではありません。</p>
 <footer>参照：<a href="https://www.youtube.com/live/4ffe7JI3zSs" target="_blank" rel="noopener noreferrer">SHIBUYA SKYの交差点俯瞰映像</a><br>表示している動画はゲーム画面の録画です。参照元のYouTube映像は収録していません。</footer>
 </main><script>
 const video=document.getElementById('preview'), label=document.getElementById('now');
 document.getElementById('play').onclick=()=>{if(video.ended)video.currentTime=0;video.play().catch(()=>label.textContent='動画内の再生ボタンをお試しください。');};
-video.addEventListener('timeupdate',()=>{const t=video.currentTime;label.textContent=t<6?'01 · 街全体から、交差点を見下ろす位置へ':t<12?'02 · SHIBUYA SKY側から、ハチ公前へ接近':'03 · 渋沢のカメラへ移行';});
+video.addEventListener('timeupdate',()=>{const t=video.currentTime;label.textContent=t<2?'01 · 前の動画の7秒地点から開始':t<7?'02 · ハチ公前へ接近':'03 · 渋沢のカメラへ移行';});
 video.addEventListener('ended',()=>label.textContent='確認終了 · 再生ボタンでもう一度確認できます');
 video.addEventListener('error',()=>label.textContent='動画を読み込めませんでした。ページの再読み込みか「動画だけを開く」をお試しください。');
 </script></body></html>
