@@ -859,8 +859,10 @@ const hud = {
     // frame the streets (not the empty far corners of the bounds)
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const r of M.roads) { x0 = Math.min(x0, r.bb[0]); z0 = Math.min(z0, r.bb[1]); x1 = Math.max(x1, r.bb[2]); z1 = Math.max(z1, r.bb[3]); }
-    const half = Math.min(Math.max(x1 - x0, z1 - z0) / 2 + 10, (CITY.bounds || 440) / 2 + 30);
-    const cx = Math.max(x0 + half - 20, Math.min(x1 - half + 20, (x0 + x1) / 2)), cz = (z0 + z1) / 2;
+    let half = Math.min(Math.max(x1 - x0, z1 - z0) / 2 + 10, (CITY.bounds || 440) / 2 + 30);
+    let cx = Math.max(x0 + half - 20, Math.min(x1 - half + 20, (x0 + x1) / 2)), cz = (z0 + z1) / 2;
+    // [city] pass 15: the square plus the 道玄坂 corridor up to 道玄坂上 (cityData worldMapBox)
+    if (CITY.worldMapBox) { const [bx0, bz0, bx1, bz1] = CITY.worldMapBox; half = Math.max(bx1 - bx0, bz1 - bz0) / 2 + 8; cx = (bx0 + bx1) / 2; cz = (bz0 + bz1) / 2; }
     const k = css / (2 * half);
     const trace = (pts, close) => { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); if (close) g.closePath(); };
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1107,6 +1109,7 @@ const hud = {
   areaName(x, z) {
     const cr = CITY.crossing;
     if (Math.hypot(x - cr.center[0], z - cr.center[1]) <= cr.radius + 3) return 'スクランブル交差点';
+    for (const a of CITY.areas || []) if (pointInPolygon(x, z, a.polygon)) return a.name;          // [city] 道玄坂上 (pass 15)
     for (const p of CITY.plazas) if (pointInPolygon(x, z, p.polygon)) return AREA_NAMES[p.name] || tidyName(p.name);
     for (const [key, l] of Object.entries(CITY.landmarks)) if (l.polygon && l.storeys && pointInPolygon(x, z, l.polygon)) return LABELS[key] || l.name;
     for (const p of CITY.pedestrianStreets) if (pathDist(x, z, p.path) < p.width / 2 + 1.5) return tidyName(p.name);

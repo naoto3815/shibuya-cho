@@ -4,6 +4,8 @@
 // shop bay the nearest unused entry within a few metres (its name on the fascia, its interior type), and the 2F
 // tenant board the nearest upper-floor entry.
 //   { street, side, pos: [x, z], name, cat, floor }   cat → interior type via TENANT_TYPE
+// (pass 15: the 道玄坂 corridor's rows — true metres — come from dogenzakaData.js DOGEN_SHOPS, appended at the end)
+import { DOGEN_SHOPS } from '../dogenzakaData.js';
 export const SHOP_TENANTS = [
   {"street":"center","side":"N","pos":[-25.6,-34.7],"name":"SHIBUYA TSUTAYU (Q-FRONT)","cat":"books","floor":1},
   {"street":"center","side":"N","pos":[-25.6,-34.7],"name":"STARBEANS COFFEE","cat":"cafe","floor":2},
@@ -201,6 +203,7 @@ export const SHOP_TENANTS = [
   {"street":"bunkamura","side":"S","pos":[-229.3,-88.6],"name":"カラオケ舘","cat":"karaoke","floor":1},
   {"street":"bunkamura","side":"S","pos":[-231.7,-91.9],"name":"KEBAB CAFE","cat":"cafe","floor":1},
   {"street":"bunkamura","side":"S","pos":[-231.7,-91.9],"name":"カメラのキタムロ","cat":"elec","floor":1},
+  ...DOGEN_SHOPS,
 ];
 export const TENANT_TYPE = {
   drug: 'drug', conv: 'conv', fast: 'fast', cafe: 'cafe', izakaya: 'izakaya', ramen: 'ramen', karaoke: 'karaoke', game: 'game',

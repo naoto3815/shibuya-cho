@@ -4,6 +4,7 @@
 //   player.entity  player.respawn(pos, yaw)
 import * as THREE from 'three';
 import { createHumanoid } from './humanoid.js';
+import { HERO_HEIGHT } from './heroProportions.js';
 import { HERO_WALK_SPEED, RUN_SPEED } from './animations.js';
 
 const WALK = HERO_WALK_SPEED, RUN = RUN_SPEED, DODGE_SPEED = 9.0, DODGE_T = 0.32;
@@ -16,7 +17,7 @@ function makeEntity(engine, humanoid, pos, yaw) {
   engine.scene.add(group);
   const e = {
     id: 'player', name: '渋沢 健人', kind: 'player', type: 'kento', group, position: group.position, yaw, humanoid,
-    radius: 0.35, height: 1.8, hp: 100, hpMax: 100, heat: 0, velocity: new THREE.Vector3(), state: 'idle', stateT: 0,
+    radius: 0.35, height: HERO_HEIGHT, hp: 100, hpMax: 100, heat: 0, velocity: new THREE.Vector3(), state: 'idle', stateT: 0,
     alive: true, grounded: true, lockTarget: null, isPlayer: true, combo: 0, comboT: 0, guard: false, moveSpeed: 0,
     forward(out = new THREE.Vector3()) { return out.set(Math.sin(e.yaw), 0, Math.cos(e.yaw)); },
     setState(s, t = 0) { e.state = s; e.stateT = t; },

@@ -1,4 +1,3 @@
-import { ConsultingFees } from './consultingFees.js';
 import { installDoubleDragon } from './doubleDragon.js';
 // [story] 序章「十年ぶりの渋谷」— 渋沢 健人 / SHIBUSAWA KENTO.
 // Intro cutscene (letterbox + cinematic pan + speaker dialogue, skippable), 3D objective markers, mission 1
@@ -76,7 +75,7 @@ const SUBSTORIES = [
   },
   {
     // the fight is with the tout himself (client 2026-09-25), not two strangers who appear in his place
-    id: 'tout', no: '依頼 02', title: 'センター街のキャッチ', spot: [-36, -35.5], reward: 8000, fight: 1, fightNpc: 'catch',
+    id: 'tout', no: '依頼 02', title: 'センター街のキャッチ', spot: [-36, -35.5], reward: 0, fight: 1, fightNpc: 'catch',
     npcs: [{ key: 'catch', name: 'キャッチの男', seed: 77, off: [0, 0], face: 'player', variant: 'nightlife_king' }],
     lines: [
       ['キャッチの男', 'お兄さん! カラオケ、二時間飲み放題で三千円!'],
@@ -109,7 +108,7 @@ const SUBSTORIES = [
       ['佐伯 涼太', '先輩……いまの、なんですか'],
       [HERO, '経営指導だ。価格の説明くらい、先にしろってな'],
       [HERO, 'あの店には二度と行くな。行くなら、俺に言え'],
-      ['佐伯 涼太', '……はい'],
+      ['佐伯 涼太', '……はい。相談に乗ってくれたお礼です。受け取ってください。'],
     ],
   },
 ];
@@ -255,7 +254,7 @@ const missions = {
   scene: null,          // { beats, i, t, name, onEnd }
   talk: null,           // { sub, lines, i, phase }
   fightCtx: null,       // 'main' | substory id
-  hits: 0, bestCombo: 0, fightYen: 0, kos: 0, fightT: 0,
+  hits: 0, bestCombo: 0, kos: 0, fightT: 0,
   holding: false, holdT: 0,
   _chain: [],           // every pending story setTimeout, so dispose()/play() can cancel the whole chain
 
@@ -285,19 +284,15 @@ const missions = {
     engine.events.on('combat:hit', ({ attacker }) => {
       if (attacker && attacker.isPlayer) { this.hits++; this.bestCombo = Math.max(this.bestCombo, attacker.combo || 0); }
     });
-    this.consultingFees = new ConsultingFees();
+    // Combat records performance only. Money is awarded when a substory is completed.
+    this.defeatedEnemies = new WeakSet();
     engine.events.on('combat:ko', ({ target }) => {
-      const fee = this.consultingFees.collect(target, this.fightCtx, () => this.rng.range(800, 3000));
-      if (!fee) return;
+      if (!target || target.kind !== 'enemy' || this.defeatedEnemies.has(target)) return;
+      this.defeatedEnemies.add(target);
       this.kos++;
-      if (!fee.amount) return;
-      this.fightYen += fee.amount;
-      this.addYen(fee.amount);
-      this.notice('コンサル報酬 受領  +¥' + fee.amount.toLocaleString('ja-JP'), fee.reason, 2.8);
-      engine.events.emit('consulting:paid', fee);
     });
     engine.events.on('combat:start', () => {
-      this.consultingFees.begin(this.fightCtx);
+      this.defeatedEnemies = new WeakSet();
       this.fightT = 0; this.dropBriefcase();
     });
     // a LOST fight also ends with combat:end (so every module resets its fight state), but it is not a win:
@@ -417,8 +412,7 @@ const missions = {
         <div class="row"><span>撃破数</span><b class="k">0</b></div>
         <div class="row"><span>ヒット数</span><b class="h">0</b></div>
         <div class="row"><span>最大コンボ</span><b class="c">0</b></div>
-        <div class="row"><span>コンサル報酬</span><b class="y">¥0</b></div>
-        <div class="fee-detail" style="white-space:pre-line;max-height:130px;overflow:auto;margin-top:16px;font-size:13px;line-height:1.7;color:#d9c99f;letter-spacing:.03em"></div><div class="foot">任意のキーで閉じる</div></div>
+        <div class="foot">任意のキーで閉じる</div></div>
       <div class="dlg"><div class="who"></div>
         <div class="txt"><span class="sz"><span class="s"></span><span class="cur">▼</span></span><span class="run"><span class="t"></span><span class="cur">▼</span></span></div></div>
       <div class="bang">!</div>
@@ -432,7 +426,7 @@ const missions = {
       root: el, card: q('.card'), cardNo: q('.card .no'), cardTtl: q('.card .ttl'),
       msg: q('.msg'), msgFrom: q('.msg .from'), msgBody: q('.msg .body'),
       notice: q('.notice'), noticeNo: q('.notice .no'), noticeTtl: q('.notice .ttl'),
-      res: q('.res'), resR: q('.res .r'), resK: q('.res .k'), resH: q('.res .h'), resC: q('.res .c'), resY: q('.res .y'),
+      res: q('.res'), resR: q('.res .r'), resK: q('.res .k'), resH: q('.res .h'), resC: q('.res .c'),
       dlg: q('.dlg'), who: q('.dlg .who'), txt: q('.dlg .txt .t'), sz: q('.dlg .txt .sz .s'),
       bang: q('.bang'), prompt: q('.prompt'), promptLb: q('.prompt .cap'),
       dist: q('.dist'), distCh: q('.dist .ch'), distSt: q('.dist .st'), distM: q('.dist .m'),
@@ -772,7 +766,7 @@ const missions = {
     const fwd = new THREE.Vector3(Math.sin(yaw), 0, Math.cos(yaw));
     const right = new THREE.Vector3(fwd.z, 0, -fwd.x);
     this.fightCtx = 'main';
-    this.hits = 0; this.bestCombo = 0; this.fightYen = 0; this.kos = 0; this.fightT = 0;
+    this.hits = 0; this.bestCombo = 0; this.kos = 0; this.fightT = 0;
     const list = en.spawnGroup(3, base.clone().addScaledVector(fwd, 4.2));
     // spawnGroup rings them around the point; re-form them into a line facing 健人
     const lane = [-1.75, 0.15, 1.85], depth = [4.5, 3.7, 4.6];
@@ -828,8 +822,6 @@ const missions = {
     u.resK.textContent = this.kos;
     u.resH.textContent = this.hits;
     u.resC.textContent = this.bestCombo;
-    u.resY.textContent = '¥' + this.fightYen.toLocaleString('en-US');
-    u.res.querySelector('.fee-detail').textContent = this.consultingFees.summary();
     // the 完 stamp lands first and the card comes in as it clears: stamped over the card (and the 勝利 banner) the
     // three read as one pile (readability review, P1: a stamp never shares the frame with text)
     if (hud && hud.stamp) hud.stamp('完');
@@ -837,7 +829,7 @@ const missions = {
     this._resOnT = setTimeout(() => { if (this._resHold) u.res.classList.add('on'); }, hud && hud.stamp ? 1050 : 0);
     this._resHold = true;
     this._resClose = onClose;
-    this.engine.events.emit('mission:results', { rank: this.rank(), kos: this.kos, hits: this.hits, combo: this.bestCombo, yen: this.fightYen });
+    this.engine.events.emit('mission:results', { rank: this.rank(), kos: this.kos, hits: this.hits, combo: this.bestCombo, yen: 0 });
     clearTimeout(this._resT);
     this._resT = setTimeout(() => this.hideResults(), 6000);   // held until a key press, 6 s at the outside
   },
@@ -1025,7 +1017,7 @@ const missions = {
     if (!isOutro && sub.fight) {
       engine.state.mode = 'explore';
       const en = engine.get('enemy');
-      this.fightCtx = sub.id; this.hits = 0; this.bestCombo = 0; this.fightYen = 0; this.kos = 0; this.fightT = 0;
+      this.fightCtx = sub.id; this.hits = 0; this.bestCombo = 0; this.kos = 0; this.fightT = 0;
       this.setObjective(sub.fightNpc ? 'キャッチの男を黙らせろ' : '絡んできた連中を倒せ', null, '戦闘');
       // fightNpc: the one he was talking to squares up himself, in his own body and clothes, where he stood
       const lead = sub.fightNpc && (sub._npcs || []).find((o) => o.def.key === sub.fightNpc);
@@ -1040,11 +1032,19 @@ const missions = {
       return;
     }
     engine.state.mode = 'explore';
-    sub.done = true;
-    if (sub.reward) this.addYen(sub.reward);
-    this.notice('依頼 完了', sub.title, 3.4);
+    // Completion (after the post-fight conversation), never a KO, pays the client reward.
+    // `done` is saved with the balance, so repeated callbacks and loaded saves cannot pay twice.
+    const firstCompletion = !sub.done;
+    if (firstCompletion) {
+      sub.done = true;
+      const reward = Number.isFinite(sub.reward) ? Math.max(0, Math.round(sub.reward)) : 0;
+      if (reward) this.addYen(reward);
+      this.notice('依頼 完了', sub.title + (reward ? '  報酬 +¥' + reward.toLocaleString('ja-JP') : ''), 3.4);
+      engine.events.emit('substory:completed', { id: sub.id, reward });
+    }
     this.clearNpcs(sub);
     this.setStep(3);
+    if (firstCompletion) engine.get('menus')?.front?.save();
   },
 
   // -------------------------------------------------------------------------------------- preset staging
@@ -1120,8 +1120,7 @@ const missions = {
 
   stageResults() {
     this.setStep(2);
-    this.hits = 14; this.bestCombo = 7; this.fightYen = 6420; this.kos = 3; this.fightT = 26;
-    this.setYen(this.yen + 6420, true);
+    this.hits = 14; this.bestCombo = 7; this.kos = 3; this.fightT = 26;
     this.showResults();
     clearTimeout(this._resT); this._resT = null;
     this.stageHachiko();

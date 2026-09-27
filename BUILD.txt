@@ -1,4 +1,4 @@
-dist: dist  base: /shibuya-cho/  files: 369  total: 164.18 MB
+dist: dist  base: /shibuya-cho/  files: 371  total: 164.37 MB
 by directory:
     46.42 MB  assets/mobs
     40.52 MB  assets/peds
@@ -8,7 +8,7 @@ by directory:
      6.88 MB  assets/story
      6.08 MB  assets/menu
      5.20 MB  review
-     4.26 MB  src
+     4.44 MB  src
      3.91 MB  assets/hiiragi
      2.56 MB  node_modules
      1.27 MB  assets/voice

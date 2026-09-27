@@ -2115,17 +2115,18 @@ const PARKED = [
 const DROPS = [{ road: 'ekimae_s', pos: [-7.2, 36.5] }];
 // arms the client looks at (2026-09-24: 道玄坂, センター街 / 文化村通り, 宮下パーク) get their share of the moving traffic
 const FOCUS_ROADS = {
-  dogenzaka: 1.3, dogenzaka_shita: 1, bunkamura: 1, koen: 0.9, miyamasu: 0.9, meiji_ne: 0.8, inokashira: 0.8,
+  dogenzaka: 1.3, dogenzaka_ue: 1.1, dogenzaka_shita: 1, bunkamura: 1, koen: 0.9, miyamasu: 0.9, meiji_ne: 0.8, inokashira: 0.8,
   miyashita_st: 0.8, ekimae_s: 0.7, centergai_w_st: 0.7,
 };
 // Vehicles a minute entering the map on each source road (split over its source lanes). An arm of the scramble passes
 // about 11 a minute (26 s of green in 120 s over two lanes); the roads that feed one are held to ~70 % of that so a
 // red queue always clears on the next green. The roads that never reach the scramble carry the rest.
-const SCRAMBLE_FEED = new Set(['dogenzaka', 'bunkamura', 'koen', 'jingu_n', 'miyamasu']);
+const SCRAMBLE_FEED = new Set(['dogenzaka', 'bunkamura', 'koen', 'jingu_n', 'miyamasu', 'tamagawa_ue']);
 const FILTER_ARMS = new Set(['koen', 'miyamasu', 'dogenzaka_shita']);
 const SRC_RATE = {
   dogenzaka: 3.9, bunkamura: 1.4, koen: 3.6, jingu_n: 4.3, miyamasu: 4.4, ekimae_s: 1.9, ekimae_sb: 1.9, ekimae_nb: 1.9,
   nishiguchi: 1.9, wave: 1.4, meiji_ne: 10.4, tamagawa: 38,
+  tamagawa_ue: 7,                                      // [city] pass 15: both ends of 道玄坂上's 246 stub (道玄坂's feed now)
 };
 const CW_ALL = [...(CITY.crossing.crosswalks || []), ...(CITY.crossing.diagonals || []), ...(CITY.crosswalksExtra || [])];
 
@@ -2145,6 +2146,8 @@ const ROAD_CFG = {
   miyamasu: { n: 2, w: 3.2, v: 12.5 }, meiji_ne: { n: 2, w: 3.3, v: 14 }, inokashira: { n: 2, w: 3.1, v: 10 },
   tamagawa: { n: 3, w: 3.3, v: 15 }, nishiguchi: { n: 1, w: 3.3, v: 9 }, wave: { n: 1, w: 3.2, v: 8 },
   centergai_w_st: { n: 1, w: 3.0, v: 7 }, miyashita_st: { n: 1, w: 3.2, v: 9 },
+  // [city] pass 15, the 道玄坂 corridor: 交番前 → 道玄坂上 is 4 lanes; 玉川通り's side road at 道玄坂上 one each way
+  dogenzaka_ue: { n: 2, w: 3.2, v: 11.5 }, tamagawa_ue: { n: 1, w: 3.5, v: 12 },
 };
 function roadCfg(rd) {
   if (rd.busOnly) return { n: rd.lanes || 1, w: 3.3, v: 8, narrow: false, two: false, dirN: null, busOnly: true };
@@ -2185,6 +2188,12 @@ const JUNCTIONS = [
   { at: [166.8, 74], id: 'higashi_in', trim: 3, trimArm: { 'meiji_ne+': 10, 'higashiguchi_bus+': 13.4 } },
   { at: [159.6, 27], id: 'higashi_out', trim: 3, trimArm: { 'meiji_ne-': 12.8, 'higashiguchi_bus-': 17 }, lookThrough: true },
   { at: [22, 195], id: 'minamiguchi', sig: { a: 36, b: 22, minA: 18, off: 12 }, rights: ['ekimae_sb-'], trimArm: { 'tamagawa-': 23 }, groups: { 'tamagawa-': 'a', 'tamagawa+': 'a', 'ekimae_sb-': 'b', 'ekimae_nb+': 'b' } },
+  // [city] pass 15, the 道玄坂 corridor. 道玄坂上交番前: 道玄坂 through ('a'); its side roads carry no traffic in the game,
+  // so 'b' is their phase with nobody in it — `fixed` cycles a / b on time (not on demand) and the zebras across 道玄坂
+  // walk in 'b' (the crowd and the corridor's heads read the group running parallel to each zebra).
+  { at: [-396.3, 219.5], id: 'kobanmae', sig: { a: 42, b: 20, off: 6, fixed: true }, groups: { 'dogenzaka-': 'a', 'dogenzaka_ue+': 'a', 'dg_rambling+': 'b', 'dg_1chome+': 'b', 'dg_east_svc+': 'b' } },
+  // 道玄坂上: 玉川通り's side road ('a') and 道玄坂 coming up to it ('b'), vehicle-actuated
+  { at: [-490.7, 402.2], id: 'dogenzakaue', sig: { a: 34, b: 24, off: 20 }, rights: true, trimArm: { 'dogenzaka_ue-': 8 }, groups: { 'tamagawa_ue-': 'a', 'tamagawa_ue+': 'a', 'dogenzaka_ue-': 'b' } },
 ];
 // Route choice at particular junctions (multiplies the movement's weight): 明治通り southbound mostly turns off at
 // 宮益坂下 rather than carrying on to give way into 246 at 並木橋.
@@ -2194,6 +2203,9 @@ const TURN_W = [
   // the south arm is in the showpiece's frame and was nearly empty
   { at: [22, 195], road: 'tamagawa', type: 'left', w: 3.2 },
   { at: [-4, -2], road: 'miyamasu', type: 'left', w: 2.2 },
+  // [city] pass 15: most of 玉川通り's side road at 道玄坂上 turns down 道玄坂 (the corridor's own traffic)
+  { at: [-490.7, 402.2], road: 'tamagawa_ue', type: 'left', w: 4 },
+  { at: [-490.7, 402.2], road: 'tamagawa_ue', type: 'right', w: 4 },
 ];
 const A_LAT = 2.2;        // comfortable lateral acceleration in a turn (m/s²): R 11 m → 4.9 m/s
 const B_CURVE = 1.8;      // deceleration used to come down to a turn's speed
@@ -2493,6 +2505,7 @@ function buildNetworkWith(field, keepBusways) {
   // the bus-only lanes (西口 / 東口 busways) are roads too, that only buses are routed onto
   for (const rd of [...CITY.roads, ...(CITY.busways || []).filter((b) => keepBusways.includes(b.id)).map((b) => ({ ...b, busOnly: true }))]) {
     if (!rd.path || rd.path.length < 2) continue;
+    if (rd.traffic === false) continue;                   // [city] pass 15: side-street mouths / the 246 side road drawn only
     const pts = densify(smoothRoad(rd.path), 1.0);
     const R = mkEdge(pts, {});
     roads.push({ id: rd.id, rd, cfg: roadCfg(rd), pts: R.pts, cum: R.cum, len: R.len, hdg: R.hdg, kap: R.kap, _h: 1, half: rd.width / 2 });
@@ -3284,7 +3297,7 @@ const traffic = {
       if (!N.cfg || !N.cfg.sig) continue;
       if (N.cfg.sig === 'scramble') { N.ctrl = { scramble: true }; continue; }
       const S = N.cfg.sig;
-      N.ctrl = { a: S.a, b: S.b, min: { a: S.minA || 8, b: S.minB || 7 }, g: 'a', st: 'green', tau: S.off % S.a, lanes: { a: [], b: [] } };
+      N.ctrl = { a: S.a, b: S.b, min: { a: S.minA || 8, b: S.minB || 7 }, g: 'a', st: 'green', tau: S.off % S.a, lanes: { a: [], b: [] }, fixed: !!S.fixed };
       // sync windows: [{ g, phase, from, to }] in seconds from the start of that scramble phase
       if (S.sync) N.ctrl.sync = S.sync.map((W) => {
         let t0 = 0, i = 0;
@@ -3401,7 +3414,7 @@ const traffic = {
         let W = null;
         if (C.sync) for (const w of C.sync) if (inWin(w.from - 5, w.to)) { W = w; break; }
         if (W) { if (C.g !== W.g) { C.st = 'amber'; C.tau = 0; } }
-        else if (C.tau >= C.min[C.g] && this.demand(C.lanes[o], 60) && (C.tau >= C[C.g] || !this.demand(C.lanes[C.g], 28))) { C.st = 'amber'; C.tau = 0; }
+        else if (C.fixed ? C.tau >= C[C.g] : C.tau >= C.min[C.g] && this.demand(C.lanes[o], 60) && (C.tau >= C[C.g] || !this.demand(C.lanes[C.g], 28))) { C.st = 'amber'; C.tau = 0; }
       } else if (C.st === 'amber') { if (C.tau >= 3) { C.st = 'allred'; C.tau = 0; } }
       else if (C.tau >= 2) { C.g = C.g === 'a' ? 'b' : 'a'; C.st = 'green'; C.tau = 0; }
     }

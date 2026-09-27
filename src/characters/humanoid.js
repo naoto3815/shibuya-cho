@@ -1,6 +1,6 @@
 import { fitHeroFace, heroHeadNormals, applyHeroFaceMaterial, applyHeroFaceV4, heroFaceAttr, heroFaceMapBase, heroCardGroups, HERO_FACE_MODE, HERO_FACE_SRC } from './heroFace.js';
 import { fitHeroKnees } from './heroSkinning.js';
-import { heroBodyY, heroJoints } from './heroProportions.js';
+import { heroBodyY, heroJoints, HERO_HEIGHT, HERO_ASSET_HEIGHT } from './heroProportions.js';
 // [character] Procedural rigged humanoid: real THREE.Skeleton + SkinnedMesh with a lofted cross-section body, Mixamo bone
 // names (§6). Bind pose = relaxed A-pose, 1.80 m tall, facing +z, feet at y=0. Bone local +Y points down the bone
 // toward its child; local +Z ≈ world +Z (forward) so animation deltas are: X = swing forward(+)/back, Y = twist, Z = abduct.
@@ -2808,7 +2808,7 @@ export const VARIANTS = {
   // navy pocket square, dark brown belt with a silver buckle, steel bracelet watch on the LEFT wrist and the
   // attaché in the LEFT hand (docs/HERO.md, corrected against the supplied model), black plain-toe shoes.
   // These fields drive the PROCEDURAL fallback; when the scan loads he wears his own.
-  kento:      { scale: 1.0111, build: 1.09, jaw: 1.13, jawY: 0.075, jawSq: 1.2, jawSpread: 0.05, chinTaper: 0.17, brow: 1.2, nose: 1.14, chin: 1.14, cheek: 1.05, neck: 1.10, fist: 0.25, fistL: 0.8, fistR: 0.42, nlf: 1,   // the case hand closes on the handle, the free hand hangs
+  kento:      { scale: HERO_HEIGHT / 1.8, build: 1.09, jaw: 1.13, jawY: 0.075, jawSq: 1.2, jawSpread: 0.05, chinTaper: 0.17, brow: 1.2, nose: 1.14, chin: 1.14, cheek: 1.05, neck: 1.10, fist: 0.25, fistL: 0.8, fistR: 0.42, nlf: 1,   // the case hand closes on the handle, the free hand hangs
                 displayName: { ja: '渋沢 健人', en: 'SHIBUSAWA KENTO' },
                 // skin: the mean albedo of the SCAN's own cheek charts, re-measured off the raw atlas (sRGB
                 // 158/114/94 at the cheek band). Only the fallback body paints with it now — the scan carries its
@@ -3960,7 +3960,7 @@ function loadHeroAny() {
   return loadCastScan('hero_v2').then((sc) => {
     // groundLift: in idle / talk / jab / the guard his soles measured 0.7-1.3 cm under the ground (a Meshy sole is
     // thicker than the rig's ankle-to-ground; assets/hero/pipeline/v2/probe.mjs): 8 mm up centres them
-    if (sc) { Object.assign(VARIANTS.kento, { scan: 'hero_v2', cast: true, hero: true, castHeight: 1.82, groundLift: 0.008, joints: heroJoints(sc.data.joints) }); return sc; }
+    if (sc) { Object.assign(VARIANTS.kento, { scan: 'hero_v2', cast: true, hero: true, castHeight: HERO_HEIGHT, groundLift: 0.008, joints: heroJoints(sc.data.joints) }); return sc; }
     return loadHero();
   });
 }
@@ -6086,7 +6086,7 @@ export function createHumanoid({ variant = 'kento', seed = 1, getClip = null, de
   // the measured joints are already 1.82 m tall; a pedestrian scan is BUILT at 1.82 m (the clips' own rig) and shrunk
   // to the person here, so the walk's hips height and leg IK land exactly as authored
   if (glb) V.scale = MOB && V.ped ? (V.pedHeight || MOB.data.height || 1.82) / (MOB.data.built || 1.82)
-    : MOB && V.cast ? (V.castHeight || MOB.data.height || 1.82) / (MOB.data.built || 1.82) : 1;   // (the story cast: built at 1.82 like a ped)
+    : MOB && V.cast ? (V.castHeight || MOB.data.height || 1.82) / (MOB.data.built || 1.82) : variant === 'kento' ? HERO_HEIGHT / HERO_ASSET_HEIGHT : 1;   // scans retain their authored bind rig
   else delete V.joints;                                           // scan missing -> generic rig + procedural body
   if (V.ped && !MOB && !createHumanoid._pedWarned) { createHumanoid._pedWarned = true; console.warn(`[humanoid] ${variant} built before its scan loaded (await pedScansReady())`); }
   // `part` picks the rung of a scan's LOD ladder to build as THE body (lod0 | lod1 | lod2); no ladder under it unless
@@ -6258,7 +6258,7 @@ export function createHumanoid({ variant = 'kento', seed = 1, getClip = null, de
     group, skinned, skeleton, bones: byName, mixer, variant, seed, tris, drawCalls: Array.isArray(mats) ? mats.length : 1, keyRig, contact, clearance, stance, lod: lodRoot, meshes,
     slots: MOB && MOB.slots ? MOB.slots : glb ? PROP_SLOTS : PROC_SLOTS,   // the scan's grip is MEASURED off his own hand (v2: his closed fist, castFistMorph); a lofted hand is a different shape
     displayName: V.displayName || null,
-    height: (R.joints.Head[1] + 0.22 + lift) * V.scale, proportions: { shoulderW: V.shoulderW, torsoLen: V.torsoLen, legLen: V.legLen, gut: V.gut, scale: V.scale },
+    height: variant === 'kento' ? HERO_HEIGHT : (R.joints.Head[1] + 0.22 + lift) * V.scale, proportions: { shoulderW: V.shoulderW, torsoLen: V.torsoLen, legLen: V.legLen, gut: V.gut, scale: V.scale },
     currentName: null, currentAction: null, weapon: null, props: {}, frozenPose: false, propKind: null, droppedProp: null,
     // lateFloor: the owner runs floorFit() itself after its own pose pass (enemy.js, after its lying variants)
     lateFloor: false, floorFit() { return floorFit(h); },
@@ -6272,9 +6272,11 @@ export function createHumanoid({ variant = 'kento', seed = 1, getClip = null, de
       action.enabled = true;
       action.setLoop(loop ? THREE.LoopRepeat : THREE.LoopOnce, Infinity);
       action.clampWhenFinished = !loop;
-      action.timeScale = speed;
+      // A larger body takes longer strides; keep its planted foot speed aligned with player travel.
+      const playbackSpeed = variant === 'kento' && (name === 'walk' || name === 'run') ? speed / V.scale : speed;
+      action.timeScale = playbackSpeed;
       if (h.currentAction && h.currentAction !== action) h.currentAction.fadeOut(fade);
-      action.reset().setEffectiveTimeScale(speed).setEffectiveWeight(1).fadeIn(fade).play();
+      action.reset().setEffectiveTimeScale(playbackSpeed).setEffectiveWeight(1).fadeIn(fade).play();
       h.currentAction = action; h.currentName = name;
       return action;
     },

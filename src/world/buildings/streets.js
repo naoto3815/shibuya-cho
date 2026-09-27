@@ -8,7 +8,11 @@ import * as L from './lib.js';
 
 export const SW_H = 0.15;   // sidewalk height
 const KERB_W = 0.22;        // granite kerb top width
-const GRID_R = 300;         // metres covered by the SDF grid each side of the origin
+// The SDF grid: a 900 m square at 1 m (pass 15). Its north-west corner is (−600, −300): the old ±300 m square (same
+// cell lines, so the square's streets come out as before) plus the 道玄坂 corridor to the west / south-west. Only the
+// cells inside the square or the corridor outline (field.live) get pavement, kerbs and tactile / gutter lines.
+const GRID_R = 450;         // half the grid's side (m)
+const GRID_X0 = -600, GRID_Z0 = -300;
 const STEP = 1;             // grid resolution (m)
 const DECAL_Y = 0.012;      // road decals
 const SW_DECAL_Y = SW_H + 0.006;
@@ -248,13 +252,22 @@ export function buildRoadField(CITY) {
   // terminal aprons (carriageway that is no lane: the 東口 waiting area, turn flares) and the islands raised on them
   const aprons = (CITY.aprons || []).map(p => ({ poly: L.ensureCW(p.polygon), b: L.polyBounds(p.polygon) }));
   const islands = (CITY.raised || []).map(p => ({ poly: L.ensureCW(p.polygon), b: L.polyBounds(p.polygon) }));
+  // segments bucketed on a 20 m grid (each where its bbox reaches): a cell tests only its bucket's segments, with the
+  // same bbox test as before, so every value is what the full scan gave
+  const BK = 20, NB = Math.ceil((N - 1) * STEP / BK) + 1, buckets = Array.from({ length: NB * NB }, () => []);
+  segs.forEach((s, k) => {
+    const i0 = Math.max(0, Math.floor((s.x0 - GRID_X0) / BK)), i1 = Math.min(NB - 1, Math.floor((s.x1 - GRID_X0) / BK));
+    const j0 = Math.max(0, Math.floor((s.z0 - GRID_Z0) / BK)), j1 = Math.min(NB - 1, Math.floor((s.z1 - GRID_Z0) / BK));
+    for (let bj = j0; bj <= j1; bj++) for (let bi = i0; bi <= i1; bi++) buckets[bj * NB + bi].push(k);
+  });
   for (let j = 0; j < N; j++) {
-    const z = -GRID_R + j * STEP;
+    const z = GRID_Z0 + j * STEP;
     for (let i = 0; i < N; i++) {
-      const x = -GRID_R + i * STEP;
+      const x = GRID_X0 + i * STEP;
       let v = 1e3;
-      for (let k = 0; k < segs.length; k++) {
-        const s = segs[k];
+      const bl = buckets[Math.min(NB - 1, Math.floor((z - GRID_Z0) / BK)) * NB + Math.min(NB - 1, Math.floor((x - GRID_X0) / BK))];
+      for (let q = 0; q < bl.length; q++) {
+        const s = segs[bl[q]];
         if (x < s.x0 || x > s.x1 || z < s.z0 || z > s.z1) continue;
         const d = L.distToSegment(x, z, s.ax, s.az, s.bx, s.bz) - s.half;
         if (d < v) v = d;
@@ -274,8 +287,23 @@ export function buildRoadField(CITY) {
       f[j * N + i] = Math.min(v, 60);
     }
   }
-  return { f, N, segs, sample(x, z) {
-    const gx = (x + GRID_R) / STEP, gz = (z + GRID_R) / STEP;
+  // live cells: inside the old ±300 m square or the corridor outline (scanline fill of the polygon per cell row)
+  const live = new Uint8Array((N - 1) * (N - 1)), W = N - 1;
+  for (let j = 0; j < W; j++) {
+    const z = GRID_Z0 + (j + 0.5) * STEP;
+    for (let i = 0; i < W; i++) { const x = GRID_X0 + (i + 0.5) * STEP; if (x >= -300 && x <= 300 && z >= -300 && z <= 300) live[j * W + i] = 1; }
+    const P = CITY.corridor && CITY.corridor.outline;
+    if (!P) continue;
+    const xs = [];
+    for (let a = 0, b = P.length - 1; a < P.length; b = a++) { const [xa, za] = P[a], [xb, zb] = P[b]; if ((za > z) !== (zb > z)) xs.push(xa + (z - za) / (zb - za) * (xb - xa)); }
+    xs.sort((p, q) => p - q);
+    for (let k = 0; k + 1 < xs.length; k += 2) {
+      const i0 = Math.max(0, Math.ceil((xs[k] - GRID_X0) / STEP - 0.5)), i1 = Math.min(W - 1, Math.floor((xs[k + 1] - GRID_X0) / STEP - 0.5));
+      for (let i = i0; i <= i1; i++) live[j * W + i] = 1;
+    }
+  }
+  return { f, N, segs, live, x0: GRID_X0, z0: GRID_Z0, step: STEP, R: GRID_R, sample(x, z) {
+    const gx = (x - GRID_X0) / STEP, gz = (z - GRID_Z0) / STEP;
     const i = Math.max(0, Math.min(N - 2, Math.floor(gx))), j = Math.max(0, Math.min(N - 2, Math.floor(gz)));
     const tx = Math.max(0, Math.min(1, gx - i)), tz = Math.max(0, Math.min(1, gz - j));
     const a = f[j * N + i], b = f[j * N + i + 1], c = f[(j + 1) * N + i], d = f[(j + 1) * N + i + 1];
@@ -376,16 +404,19 @@ class PolyEmitter {
 
 /** Sidewalk field → merged meshes. Returns { kerbChains, patches } */
 function buildSidewalks(field, batch, M, yAt, world, holes = []) {
-  const { f, N } = field;
+  const { f, N, live } = field, LW = N - 1;
+  const isLive = (i, j) => !live || live[j * LW + i] === 1;
+  // cells of a block that are live: 0 none, 2 all, 1 some
+  const liveIn = (i0, j0, n) => { if (!live) return 2; let a = 0, t = 0; for (let j = j0; j < Math.min(LW, j0 + n); j++) for (let i = i0; i < Math.min(LW, i0 + n); i++) { t++; a += live[j * LW + i]; } return a === 0 ? 0 : a === t ? 2 : 1; };
   const sw = new PolyEmitter(batch, M.sidewalk, SW_H, 1 / 3, yAt, holes);
   const kt = new PolyEmitter(batch, M.kerb, SW_H, 1, yAt);
   const wallPos = [], wallNor = [], wallUv = [], wallIdx = []; let wvi = 0;
   const iso = [];                                   // tactile isoline segments
-  const corner = (i, j) => ({ x: -GRID_R + i * STEP, z: -GRID_R + j * STEP, f: f[j * N + i] });
+  const corner = (i, j) => ({ x: GRID_X0 + i * STEP, z: GRID_Z0 + j * STEP, f: f[j * N + i] });
   const cellIsMixed = (i, j) => { const a = f[j * N + i], b = f[j * N + i + 1], c = f[(j + 1) * N + i + 1], d = f[(j + 1) * N + i]; return Math.min(a, b, c, d) < KERB_W && Math.max(a, b, c, d) > 0; };
   const blockMin = (i0, j0, n) => { let m = Infinity, mx = -Infinity; for (let j = j0; j <= Math.min(N - 1, j0 + n); j++) for (let i = i0; i <= Math.min(N - 1, i0 + n); i++) { const v = f[j * N + i]; if (v < m) m = v; if (v > mx) mx = v; } return [m, mx]; };
   const emitCell = (i, j) => {
-    if (i >= N - 1 || j >= N - 1) return;
+    if (i >= N - 1 || j >= N - 1 || !isLive(i, j)) return;
     const c = [corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)];
     const inside = clipLo(c, KERB_W);
     if (inside.length >= 3 && !(holes.length && holes.some((h) => c[0].x >= h.x0 && c[2].x <= h.x1 && c[0].z >= h.z0 && c[2].z <= h.z1))) sw.poly(inside);
@@ -410,16 +441,21 @@ function buildSidewalks(field, batch, M, yAt, world, holes = []) {
   };
   const B = 16, S = 4;
   for (let j = 0; j < N - 1; j += B) for (let i = 0; i < N - 1; i += B) {
+    const lv = liveIn(i, j, B);
+    if (!lv) continue;
     const [mn, mx] = blockMin(i, j, B);
     if (mx <= 0) continue;
-    if (mn >= KERB_W) { sw.rect(-GRID_R + i * STEP, -GRID_R + j * STEP, -GRID_R + Math.min(N - 1, i + B) * STEP, -GRID_R + Math.min(N - 1, j + B) * STEP); continue; }
+    if (mn >= KERB_W && lv === 2) { sw.rect(GRID_X0 + i * STEP, GRID_Z0 + j * STEP, GRID_X0 + Math.min(N - 1, i + B) * STEP, GRID_Z0 + Math.min(N - 1, j + B) * STEP); continue; }
     for (let jj = j; jj < Math.min(N - 1, j + B); jj += S) for (let ii = i; ii < Math.min(N - 1, i + B); ii += S) {
+      const lv2 = liveIn(ii, jj, S);
+      if (!lv2) continue;
       const [mn2, mx2] = blockMin(ii, jj, S);
       if (mx2 <= 0) continue;
-      if (mn2 >= KERB_W) { sw.rect(-GRID_R + ii * STEP, -GRID_R + jj * STEP, -GRID_R + Math.min(N - 1, ii + S) * STEP, -GRID_R + Math.min(N - 1, jj + S) * STEP); continue; }
+      if (mn2 >= KERB_W && lv2 === 2) { sw.rect(GRID_X0 + ii * STEP, GRID_Z0 + jj * STEP, GRID_X0 + Math.min(N - 1, ii + S) * STEP, GRID_Z0 + Math.min(N - 1, jj + S) * STEP); continue; }
       for (let cj = jj; cj < Math.min(N - 1, jj + S); cj++) for (let ci = ii; ci < Math.min(N - 1, ii + S); ci++) {
+        if (!isLive(ci, cj)) continue;
         if (cellIsMixed(ci, cj)) emitCell(ci, cj);
-        else { const v = f[cj * N + ci]; if (v >= KERB_W) sw.rect(-GRID_R + ci * STEP, -GRID_R + cj * STEP, -GRID_R + (ci + 1) * STEP, -GRID_R + (cj + 1) * STEP); }
+        else { const v = f[cj * N + ci]; if (v >= KERB_W) sw.rect(GRID_X0 + ci * STEP, GRID_Z0 + cj * STEP, GRID_X0 + (ci + 1) * STEP, GRID_Z0 + (cj + 1) * STEP); }
       }
     }
   }
@@ -447,7 +483,7 @@ function buildSidewalks(field, batch, M, yAt, world, holes = []) {
     let h = 1;
     outer: while (j + h < W) { for (let k = 0; k < w; k++) if (!raised[(j + h) * W + i + k] || used[(j + h) * W + i + k]) break outer; h++; }
     for (let jj = 0; jj < h; jj++) for (let k = 0; k < w; k++) used[(j + jj) * W + i + k] = 1;
-    patches.push({ cx: -GRID_R + (i + w / 2) * STEP, cz: -GRID_R + (j + h / 2) * STEP, hw: w * STEP / 2, hd: h * STEP / 2, rot: 0, y: SW_H });
+    patches.push({ cx: GRID_X0 + (i + w / 2) * STEP, cz: GRID_Z0 + (j + h / 2) * STEP, hw: w * STEP / 2, hd: h * STEP / 2, rot: 0, y: SW_H });
   }
   // physics: the sidewalk slab is read straight from the field (exact kerb line, O(1)); the terrain comes from
   // world.groundBase (city.js). `patches` is still returned for anyone who wants the rectangles.
@@ -456,7 +492,7 @@ function buildSidewalks(field, batch, M, yAt, world, holes = []) {
   const gutterIso = [];
   for (let j = 0; j < N - 1; j++) for (let i = 0; i < N - 1; i++) {
     const a = f[j * N + i], b = f[j * N + i + 1], c2 = f[(j + 1) * N + i + 1], d = f[(j + 1) * N + i];
-    if (Math.min(a, b, c2, d) < -0.25 && Math.max(a, b, c2, d) >= -0.25) for (const s of isoSegments([corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)], -0.25)) gutterIso.push(s);
+    if (isLive(i, j) && Math.min(a, b, c2, d) < -0.25 && Math.max(a, b, c2, d) >= -0.25) for (const s of isoSegments([corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)], -0.25)) gutterIso.push(s);
   }
   return { iso, gutterIso, patches };
 }
@@ -514,19 +550,23 @@ function chainSegments(segs) {
 /** Ground mesh over ±700 m following yAt: a tensor grid, fine (2 m) over the bounding box of the sloped area. */
 function terrainGeometry(yAt, holes = []) {
   const E = 700, FINE = 2, MID = 5, COARSE = 25, R = 440, FR = 300;   // 2 m cells inside ±300 m, 5 m on the vistas beyond
+  // pass 15: the 道玄坂 corridor runs out to x −590 / z +500: the slope scan reaches it, and the x axis stays fine (2 m)
+  // west to −600 (its z rows are fine to +300 and 5 m beyond, where the street runs along z: the profile is linear
+  // between the 12 m DEM samples, so 5 m rows leave < 1 cm between the mesh and yAt)
+  const RX0 = -600, RZ1 = 520, FX0 = -600;
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
-  for (let x = -R; x <= R; x += 5) for (let z = -R; z <= R; z += 5) if (yAt(x, z) > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
-  const axis = (a, b) => {
+  for (let x = RX0; x <= R; x += 5) for (let z = -R; z <= RZ1; z += 5) if (yAt(x, z) > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  const axis = (a, b, f0 = -FR) => {
     const out = [];
     const coarse = (from, to) => { const n = Math.max(1, Math.ceil((to - from) / COARSE)); for (let i = 0; i < n; i++) out.push(from + (to - from) * i / n); };
     if (!(a < b)) { coarse(-E, E); out.push(E); return out; }
     a = Math.max(-E + 1, Math.floor((a - 6) / MID) * MID); b = Math.min(E - 1, Math.ceil((b + 6) / MID) * MID);
     coarse(-E, a);
-    for (let v = a; v < b;) { out.push(v); v += v >= -FR && v < FR ? FINE : MID; }
+    for (let v = a; v < b;) { out.push(v); v += v >= f0 && v < FR ? FINE : MID; }
     coarse(b, E); out.push(E);
     return out;
   };
-  const xs = axis(x0, x1), zs = axis(z0, z1);
+  const xs = axis(x0, x1, FX0), zs = axis(z0, z1);
   for (const h of holes) { xs.push(h.x0, h.x1); zs.push(h.z0, h.z1); }
   if (holes.length) { const uniq = (a) => [...new Set(a.map((v) => Math.round(v * 1000) / 1000))].sort((p, q) => p - q); xs.splice(0, xs.length, ...uniq(xs)); zs.splice(0, zs.length, ...uniq(zs)); }
   // tiles: the axes are cut at the fine region's edges and midpoint, so the 2 m slope grid is split into its own
@@ -562,7 +602,8 @@ function terrainGeometry(yAt, holes = []) {
 }
 // Roads that climb out of the map (道玄坂 to 道玄坂上, 文化村通り toward Bunkamura) keep going for the eye: their
 // carriageway, kerbs and paint are extended past the map edge (render only; traffic / crowd use cityData as is).
-export const VISTA = { dogenzaka: 150, bunkamura: 85 };
+// (pass 15: 道玄坂 no longer leaves the map — the corridor lays it for real up to 道玄坂上 — so only 文化村通り keeps one)
+export const VISTA = { bunkamura: 85 };
 export function vistaRoads(CITY) {
   return CITY.roads.map(r => {
     const ext = VISTA[r.id]; if (!ext) return r;

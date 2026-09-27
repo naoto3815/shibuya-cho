@@ -79,7 +79,7 @@ const menus = {
     const actions = document.createElement("div");
     actions.style.cssText = "display:flex;gap:12px;flex-wrap:wrap";
     for (const [label, page] of [["設定", "settings"], ["相関図", "relations"], ["開始画面へ", "title"]]) {
-      const b = document.createElement("button"); b.textContent = label; b.style.cssText = "padding:12px 24px;background:#201b13;color:#f3dc8a;border:1px solid #d9b45a;cursor:pointer";
+      const b = document.createElement("button"); b.type = "button"; b.dataset.pausePage = page; b.textContent = label; b.style.cssText = "padding:12px 24px;background:#201b13;color:#f3dc8a;border:1px solid #d9b45a;cursor:pointer";
       b.onclick = () => { if(page === "title") { location.href = location.pathname; return; } this.el.pause.classList.remove("on");this.front.open(page); }; actions.append(b);
     }
     this.el.pause.append(actions);

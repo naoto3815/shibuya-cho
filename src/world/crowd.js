@@ -44,6 +44,9 @@ const _PEDS = (() => {
 const N_CROSSERS = Math.round(280 * _PEDS), N_WALKERS = Math.round(500 * _PEDS), N_IDLERS = Math.round(110 * _PEDS);
 const N_MOUTH = Math.round(50 * _PEDS);                     // of the walkers: Center-gai's first 25 m, the lane the lens reads
 const N_PLAZA = Math.round(90 * _PEDS);                      // walkers on the Hachiko square's routes
+// [city] 2026-09-27 pass 15: the 道玄坂 corridor up to 道玄坂上 (true metres, ~480 m of street past the first window):
+// its own walkers on both pavements, on top of the scramble's budget (which stays where it was)
+const N_CORRIDOR = Math.round(84 * _PEDS);
 const SCRAMBLE_THIN_R = 60, SCRAMBLE_THIN_K = 0.55;         // idlers round the scramble: radius, fraction taken out
 const SCRAMBLE_AT = 34, SCRAMBLE_LEN = 47, FLASH_LEN = 8;   // traffic.js CYCLE: ns 26 + amber 4 + allred 4, then the scramble
 const COH_R = 2.6;                                           // cohesion reach, between members of one social group only
@@ -2489,7 +2492,24 @@ const crowd = {
         else if (S) q.sA = Math.max(lo, S.s0 - rng.range(8, 22));
       }
       q.sA = Math.max(q.sA, lo); q.sB = Math.min(q.sB, hi);
-      if (q.sB - q.sA < 3) { const m = (q.sA + q.sB) / 2; q.sA = m - 1.5; q.sB = m + 1.5; }
+      // a window never ends on a crossing (the 道玄坂 corridor's windows are placed round a spot: an end on the stripes
+      // was a U-turn in the middle of the road): moved to the kerb it is nearer, a body's depth off the stripes
+      for (const S of sig) {
+        if (q.sB > S.s0 - 1 && q.sB < S.s1 + 1) q.sB = q.sB - S.s0 < S.s1 - q.sB ? S.s0 - j : Math.min(hi, S.s1 + j);
+        if (q.sA > S.s0 - 1 && q.sA < S.s1 + 1) q.sA = S.s1 - q.sA < q.sA - S.s0 ? S.s1 + j : Math.max(lo, S.s0 - j);
+      }
+      if (q.sB - q.sA < 3) {
+        // squeezed to nothing between two carriageways: the nearest stretch of this path's pavement at least 6 m long
+        // instead (centred on the squeeze, a 3 m window lay on the road itself: a walker turning round on it for ever)
+        let best = null, bd = Infinity, a0 = 0;
+        const cuts = P.spans.slice().sort((a, b) => a.s0 - b.s0);
+        for (let k = 0; k <= cuts.length; k++) {
+          const b0 = k < cuts.length ? cuts[k].s0 : P.len;
+          if (b0 - a0 >= 6) { const c = clamp(sv, a0 + 1, b0 - 1), d = Math.abs(c - sv); if (d < bd) { bd = d; best = [a0 + 1, b0 - 1]; } }
+          if (k < cuts.length) a0 = Math.max(a0, cuts[k].s1);
+        }
+        if (best) { q.sA = best[0]; q.sB = best[1]; } else { const m = (q.sA + q.sB) / 2; q.sA = m - 1.5; q.sB = m + 1.5; }
+      }
     }
     for (const q of this.peds) {
       if (q.kind !== 'walker' || !q.grp || q.wmates || !q.mate || !q.mate.wmates || !q.path || !q.path.spans) continue;
@@ -3080,6 +3100,24 @@ const crowd = {
       // the lens stands at s ~25 (8 m off its axis) looking up the street: s 26-52 is its first 25 m
       place(mouth, N_MOUTH, () => [rng.range(18, 28), rng.range(46, 56)], { shop: 0.46, door: 0.10, atShop: 0.45, bias: 0.38, shopR: 0.8, zone: 'youth' }, N_WALKERS);
       this.mouthPath = mouth;
+    }
+    // [city] pass 15: the corridor's walkers, each windowed ±30–55 m round a spot on its pavement past the first window
+    // (道玄坂's lower 115 m keeps SLOPE_WIN's walkers); they obey the corridor's signals like everyone else (buildSpans)
+    const corr = paths.filter(P => P.id === 'dogenzaka' || P.id === 'dogenzaka_ue');
+    if (corr.length && N_CORRIDOR > 0) {
+      const span = (P) => {
+        if (P.id !== 'dogenzaka') return [0, P.len];
+        const d0 = Math.hypot(P.pts[0][0] + 112, P.pts[0][1] + 3), d1 = Math.hypot(P.pts[P.pts.length - 1][0] + 112, P.pts[P.pts.length - 1][1] + 3);
+        return d0 <= d1 ? [SLOPE_WIN.dogenzaka, P.len] : [0, P.len - SLOPE_WIN.dogenzaka];
+      };
+      const tot = corr.reduce((a, P) => { const [s0, s1] = span(P); return a + Math.max(0, s1 - s0); }, 0) || 1;
+      for (const P of corr) {
+        const [s0, s1] = span(P); if (s1 - s0 < 20) continue;
+        const want = Math.round(N_CORRIDOR * (s1 - s0) / tot / 1.3);
+        place(P, want, () => { const c = rng.range(s0, s1), h = rng.range(30, 55); return [Math.max(s0 - 10, c - h), Math.min(s1 + 10, c + h)]; }, { shop: 0.3, door: 0.05, atShop: 0.3, zone: 'station' }, n + want * 2);
+      }
+      // and two on each zebra across 道玄坂 (cityData xw_* walks, pavement to pavement): they wait for its green
+      for (const P of paths) if (P.id.startsWith('xw_')) place(P, _PEDS < 0.7 ? 1 : 2, () => [-1, 1e9], { shop: 0, door: 0, atShop: 0, zone: 'station' }, n + 4);
     }
     this.nWalkers = n;
   },
@@ -4431,13 +4469,16 @@ const crowd = {
   // takes up to ~6 s to get moving, which with the skewed paces smears the wave into streams.
   kerbDelay(p, rng) { return clamp(p.kerbD / 2.2, 0, 4.5) + rng.range(0, 1.5); },
 
-  pickLink(corner, rng) {
-    const opts = this.linksOf[corner];
+  // a crossing from this corner, by weight -- with (tLeft, v), only among those finished within tLeft seconds at v m/s
+  // (-1: none is)
+  pickLink(corner, rng, tLeft, v) {
+    const opts = this.linksOf[corner], ok = (li) => tLeft == null || Math.hypot(this.links[li].bx - this.links[li].ax, this.links[li].bz - this.links[li].az) <= tLeft * v;
     let tw = 0;
-    for (let k = 0; k < opts.length; k++) tw += this.links[opts[k]].wt;
-    let r = rng() * tw;
-    for (let k = 0; k < opts.length; k++) { r -= this.links[opts[k]].wt; if (r <= 0) return opts[k]; }
-    return opts[opts.length - 1];
+    for (let k = 0; k < opts.length; k++) if (ok(opts[k])) tw += this.links[opts[k]].wt;
+    if (!(tw > 0)) return tLeft == null ? opts[opts.length - 1] : -1;
+    let r = rng() * tw, last = -1;
+    for (let k = 0; k < opts.length; k++) { if (!ok(opts[k])) continue; last = opts[k]; r -= this.links[opts[k]].wt; if (r <= 0) return opts[k]; }
+    return last;
   },
 
   // Over the far kerb: turn round to face the crossing again (+/-25 deg), a fifth of them toward the person
@@ -4538,19 +4579,28 @@ const crowd = {
       }
       {
         if (!this.linksOf[p.corner].length) return;
-        const li = this.pickLink(p.corner, rng), L = this.links[li], half = L.w * 0.5;
-        // nobody starts a crossing they cannot finish at their own pace before the red man (3 s of grace): they wait
-        // for the next green. Late starters were ~450 people still on the road when the vehicles got their green.
-        if (since + Math.hypot(L.bx - L.ax, L.bz - L.az) / p.speed > SCRAMBLE_LEN + 3) { p.wave = this.waveId; return; }
+        // Nobody starts a crossing they cannot finish before the red man (3 s of grace) -- late starters were ~450 people
+        // still on the road when the vehicles got their green. The crossing is chosen among those they CAN finish, at
+        // up to a brisker pace than their own (x1.15, within their stride: p.vmax): the rule used to be applied after a
+        // random pick, and a slow walker (0.9-1.2 m/s) who drew a 45-60 m diagonal could never finish it, so it stood
+        // at the kerb through the whole green -- about half of the waiting crowd, 2026-09-27 (client: 「歩行者用の信号が
+        // 青になったら歩行者が横断歩道を渡れるようにして」). Only someone for whom no crossing is short enough waits.
+        const members = p.members ? p.members.filter((q) => q.kind === 'crosser' && q.state === 'wait' && q.corner === p.corner) : null;
+        let vGo = Math.min((p.vmax || 2.4) * 0.97, p.speed * 1.15);
+        if (members) for (const q of members) vGo = Math.min(vGo, (q.vmax || 2.4) * 0.97, q.speed * 1.15);   // (company keeps together)
+        const li = this.pickLink(p.corner, rng, SCRAMBLE_LEN + 3 - since, vGo);
+        if (li < 0) { p.wave = this.waveId; return; }
+        const L = this.links[li], half = L.w * 0.5, need = Math.hypot(L.bx - L.ax, L.bz - L.az) / Math.max(0.1, SCRAMBLE_LEN + 3 - since);
         // spread across the full painted width, then bias to the walker's left so opposing streams shear past
         const fwd = L.ca === p.corner;
         const lane = clamp(rng.range(-half, half) * 0.92 + (fwd ? 1 : -1) * L.w * 0.20, -half - 1.3, half + 1.3);
         this.launch(p, li, lane, rng, null);
-        if (sig === 'flash') p.hurry = 1.7;
-        if (p.members) for (const q of p.members) {
-          if (q.kind !== 'crosser' || q.state !== 'wait' || q.corner !== p.corner) continue;
+        // (a pace above their own, when the crossing asks for it)
+        if (need > p.speed) p.hurry = Math.max(p.hurry, need / p.speed);
+        if (sig === 'flash') p.hurry = Math.max(p.hurry, 1.7);
+        if (members) for (const q of members) {
           this.launch(q, li, clamp(lane + q.slot, -half - 1.3, half + 1.3), rng, p);
-          q.hurry = p.hurry;
+          q.hurry = Math.max(p.hurry, need / Math.max(0.3, q.speed));
         }
       }
       return;
@@ -4739,7 +4789,7 @@ const crowd = {
       if (p.doorT <= 0) { p.dfade = 1; p.doorPh = 0; p.doorCool = 30; }
     } else if (p.doorUser && (p.doorCool = (p.doorCool || 0) - dt) <= 0 && rng() < dt * 0.05) {
       p.doorPh = 0; p.doorT = 0.8; p.doorLat = (p.lat >= 0 ? 1 : -1) * half;
-    } else if (p.shopper && p.shopCool <= 0 && rng() < dt * 0.22) {
+    } else if (p.shopper && p.shopCool <= 0 && !p.waitS && !p.onSpan && rng() < dt * 0.22) {   // (not while waiting at a crossing)
       const side = p.lat >= 0 ? 1 : -1;
       p.shopT = rng.range(6, 20); p.shopLat = side * (half - 0.1 - (p.shopIn || 0));
       p.shopYaw = Math.atan2(p.nx * side, p.nz * side);

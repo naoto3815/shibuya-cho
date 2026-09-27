@@ -1157,6 +1157,10 @@ function landmarkSigns(city, rng) {
   // 渋谷駅前ビル: stacked DHC / グリコ screens
   const ek = L.ekimaeBldg;
   if (ek && ek.anchors && Array.isArray(ek.anchors.screens)) ek.anchors.screens.forEach((sc, i) => { ledAt(lmWorld(ek, sc.position), lmDir(ek, sc.normal, new THREE.Vector3(0.7, 0, -0.7)), sc.size[0], sc.size[1], 7 + i * 2, sc.name, rot(7 + i)); out.leds++; });
+  // [city] pass 16: 道玄坂上交番前, the Gusto corner's roof screen (world anchor + steel frame from buildings/dogenzaka.js):
+  // one small panel (512 px canvas), 5 fps, no ticker
+  const dgs = city.corridor && city.corridor.anchors && city.corridor.anchors.screens;
+  if (Array.isArray(dgs)) dgs.forEach((sc, i) => { stageAdd(makeLed({ w: sc.size[0], h: sc.size[1], seed: 11 + i, name: sc.name, ads: rot(11 + i), fps: 5, ticker: false }), sc.position, sc.normal); out.leds++; });
   // Scramble Square crown: SHIBUYA SKY letters + ticker (north + west faces)
   const ss = L.scrambleSquare;
   if (ss && ss.anchors && ss.anchors.crownSign) {

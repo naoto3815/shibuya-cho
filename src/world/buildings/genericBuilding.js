@@ -670,7 +670,8 @@ class FasciaAtlas {
   constructor() {
     // 480 cells of 512 × 44 (was 320 of 512 × 64): room for the real tenants' names (tenantsData.js) at +3 % texels;
     // 44 px over a 0.82 m board ≈ the 57 px/m the 512 px give along a 9 m fascia
-    this.W = 4096; this.H = 2640; this.cw = 512; this.ch = 44; this.cols = 8; this.rows = 60;
+    // [city] pass 15: 72 rows (was 60): the 道玄坂 corridor's real tenants need ~90 more cells than the 51 left
+    this.W = 4096; this.H = 3168; this.cw = 512; this.ch = 44; this.cols = 8; this.rows = 72;
     // [mobile] ?canvasK: painted at that scale through the context's transform (same cells, same UVs, a quarter the memory)
     this.canvas = L.makeCanvas(Math.round(this.W * CANVAS_K), Math.round(this.H * CANVAS_K)); this.ctx = this.canvas.getContext('2d');
     if (CANVAS_K !== 1) this.ctx.scale(CANVAS_K, CANVAS_K);

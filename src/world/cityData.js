@@ -17,8 +17,14 @@
 // Landmark footprints keep their real proportions (they are re-sized around the compressed centre, not squashed);
 // infill blocks are the compressed real blocks. Heights are never compressed.
 //
-// Deterministic: no Math.random anywhere in this module. Imports only 'three'.
+// Deterministic: no Math.random anywhere in this module. Imports 'three' and the 道玄坂 corridor data.
+//
+// 道玄坂 corridor (2026-09-27, client: 「道玄坂沿いの建物を作りを徹底的に実態と合わせたい。道玄坂上の交番あたりまでは作り込んで。」):
+// 道玄坂 is no longer compressed. From the approved head at the 109 (x −180) it runs on its OSM centre-line in TRUE
+// metres up to 道玄坂上交番前 and the 道玄坂上 junction on 玉川通り, and the playable city is the square PLUS a corridor
+// one street deep along it (CITY.corridor, dogenzakaData.js; the buildings are buildings/dogenzaka.js).
 import * as THREE from 'three';
+import * as DG from './dogenzakaData.js';
 
 const PI = Math.PI;
 /** rotY for something whose front points along (dx, dz). */
@@ -61,7 +67,18 @@ const ROADS = [
   // toward 道玄坂上), projected with the plan's compression (x′ = −195 + 0.35 (x + 195): the bend lands in the last
   // 25 m of the map and turns ≈50° there), Chaikin-smoothed (no kink at the compression line) and within 1.1 m of every
   // OSM point. The 109 fork node (−112, −3) is kept (traffic / junction topology), the line joins OSM by x −140.
-  { id: 'dogenzaka', name: '道玄坂', path: [[-112, -3], [-121.2, 2.6], [-130.4, 7.3], [-139.8, 11.5], [-149.3, 15.1], [-159.8, 18.7], [-170.8, 22.3], [-180.2, 25.4], [-184.8, 26.9], [-188.9, 28.5], [-192.6, 30.2], [-196.6, 32.5], [-200.4, 35.6], [-203.5, 38.8], [-206.7, 42.2], [-209.8, 45.9], [-212.9, 49.7], [-215.7, 53.6], [-218.2, 57.7], [-220.4, 61.9], [-222.5, 66.1], [-224.3, 70.5], [-226, 74.7], [-227.9, 79.7]], width: 16, lanes: 2, sidewalk: 4, oneway: false, slope: 0.035 },
+  // pass 15 (the corridor): the compressed bend is gone. The head to x −180 is unchanged; from there the true OSM
+  // centre-line runs up to 道玄坂上交番前 (−396.3, 219.5), 385 m from the 109 fork (dogenzakaData.js DOGEN_PATH).
+  { id: 'dogenzaka', name: '道玄坂', path: DG.DOGEN_PATH, width: 16, lanes: 2, sidewalk: 4, oneway: false, slope: 0.047 },
+  // 交番前 → 道玄坂上: 4 lanes (OSM lanes=4), 14 m between the kerbs, 3.5 m pavements (OSM sidewalk lines 8.1–9.8 m off)
+  { id: 'dogenzaka_ue', name: '道玄坂', path: DG.DOGEN_UE_PATH, width: 14, lanes: 4, sidewalk: 3.5, oneway: false },
+  // 玉川通り (国道246) at 道玄坂上: the east-bound side road's line through the junction, two-way for the game's traffic
+  // (the real west-bound side road beside it, the underpass and the 首都高 over them are drawn by buildings/dogenzaka.js)
+  { id: 'tamagawa_ue', name: '玉川通り', path: DG.TAMAGAWA_UE_PATH, width: 10, lanes: 2, sidewalk: 0, oneway: false },
+  { id: 'tamagawa_ue_wb', name: '玉川通り', path: DG.TAMAGAWA_UE_WB_PATH, width: 7, lanes: 2, sidewalk: 0, oneway: true, traffic: false },
+  { id: 'tamagawa_ue_wb2', name: '玉川通り', path: DG.TAMAGAWA_UE_WB_OUT, width: 7, lanes: 2, sidewalk: 0, oneway: true, traffic: false },
+  // the side streets' mouths along the corridor (no traffic: asphalt, kerbs, lamps and poles only)
+  ...DG.SIDE_STREETS.map((s) => ({ id: s.id, name: s.name, path: s.path, width: s.width, lanes: 1, sidewalk: 0, oneway: !!s.oneway, traffic: false, side: true })),
   // 文化村通り leaves the 109 apex west-north-west toward Bunkamura / 東急本店 (off-map).
   { id: 'bunkamura', name: '文化村通り', path: [[-112, -14], [-136, -27], [-180, -47], [-203, -65], [-216, -82], [-226, -96]], width: 14, lanes: 2, sidewalk: 4, oneway: false },
   // South arm (real: 神宮通り south of the scramble, OSM 2026-09). A divided road around the 西口 bus terminal:
@@ -130,7 +147,7 @@ const CROSSWALKS_EXTRA = [
   { id: 'cx_dogen_77', a: [-77, -22], b: [-77, 10], width: 6 },
   { id: 'cx_dogen_109', a: [-120, -16], b: [-122, 10], width: 8 },
   { id: 'cx_bunka_150', a: [-150, -43], b: [-146, -24], width: 6 },
-  { id: 'cx_dogen_170', a: [-172, 12], b: [-166, 32], width: 6 },
+  // (cx_dogen_170 moved to the real signalled crossing, see the corridor crossings below)
   // 西口: the signalled zebra across the whole terminal (北行 + separator + bus lane + platform + 南行) under the Mark City
   // walkway; one stop line per carriageway (`stops`, travel direction toward the zebra), none painted automatically.
   { id: 'cx_ekimae_80', a: [-35.6, 82.7], b: [-3.8, 78.4], width: 4.5, signals: true,
@@ -148,6 +165,43 @@ const CROSSWALKS_EXTRA = [
   { id: 'cx_koen_parco', a: [-70, -190], b: [-78, -212], width: 6 },
   { id: 'cx_nishi_100', a: [-100, 62], b: [-100, 78], width: 5 },
 ];
+// 道玄坂 corridor crossings (OSM highway=crossing nodes, dogenzakaData.js CROSSINGS): the zebra square across its road
+// through `at`, kerb to kerb + 0.8 m; a signalled mid-block one gets a stop line per carriageway half, 2 m before it
+// (left-hand traffic: the half on the left of each direction of travel).
+// (a zebra across a side road at a junction sits where the walkers' pavement line along 道玄坂 crosses that road —
+// the crowd walks an offset of the main road, not the real pavement's kink into the side street)
+const DG_PAVE = [['dogenzaka', 8 + 2 + 0.2], ['dogenzaka_ue', 7 + 1.75 + 0.2]];
+function segHit(a, b, c, d) {
+  const r = [b[0] - a[0], b[1] - a[1]], s = [d[0] - c[0], d[1] - c[1]], den = r[0] * s[1] - r[1] * s[0];
+  if (Math.abs(den) < 1e-9) return null;
+  const t = ((c[0] - a[0]) * s[1] - (c[1] - a[1]) * s[0]) / den, u = ((c[0] - a[0]) * r[1] - (c[1] - a[1]) * r[0]) / den;
+  return t >= 0 && t <= 1 && u >= 0 && u <= 1 ? [a[0] + r[0] * t, a[1] + r[1] * t] : null;
+}
+for (const c of DG.CROSSINGS) {
+  const r = ROADS.find((q) => q.id === c.road); if (!r) continue;
+  if (c.junction && r.side) {
+    let best = null;
+    for (const [rid, off] of DG_PAVE) for (const o of [off, -off]) {
+      const main = ROADS.find((q) => q.id === rid).path, L = main.map((p, i) => { const a = main[Math.max(0, i - 1)], b = main[Math.min(main.length - 1, i + 1)], dx = b[0] - a[0], dz = b[1] - a[1], l = Math.hypot(dx, dz) || 1; return [p[0] - dz / l * o, p[1] + dx / l * o]; });
+      for (let i = 0; i < L.length - 1; i++) for (let j = 0; j < r.path.length - 1; j++) { const h = segHit(L[i], L[i + 1], r.path[j], r.path[j + 1]); if (h && (!best || Math.hypot(h[0] - c.at[0], h[1] - c.at[1]) < Math.hypot(best[0] - c.at[0], best[1] - c.at[1]))) best = h; }
+    }
+    if (best) c.at = best;
+  }
+  const q = DG.nearestOn(r.path, c.at[0], c.at[1]), nx = -q.tz, nz = q.tx, half = r.width / 2 + 0.8;
+  const e = { id: c.id, a: [q.x + nx * half, q.z + nz * half], b: [q.x - nx * half, q.z - nz * half], width: c.width, corridor: true };
+  if (c.junction) e.junction = c.junction;
+  if (c.signals) {
+    e.signals = true;
+    const off = c.width / 2 + 2, h2 = r.width / 2 - 0.3;
+    // travelling +t: its lanes are on its left, (tz, −tx); the line stands `off` before the zebra, i.e. at −t
+    const lx = q.tz, lz = -q.tx;
+    e.stops = [
+      { road: r.id, a: [q.x - q.tx * off + lx * 0.2, q.z - q.tz * off + lz * 0.2], b: [q.x - q.tx * off + lx * h2, q.z - q.tz * off + lz * h2] },
+      { road: r.id, a: [q.x + q.tx * off - lx * 0.2, q.z + q.tz * off - lz * 0.2], b: [q.x + q.tx * off - lx * h2, q.z + q.tz * off - lz * h2] },
+    ];
+  }
+  CROSSWALKS_EXTRA.push(e);
+}
 
 // Signals: one vehicle head per arm on the far right-hand corner (lamps pointing at the approaching traffic),
 // pedestrian heads at both ends of every crosswalk pointing along it.
@@ -192,6 +246,14 @@ const PEDESTRIAN_STREETS = [
   // arcade (x 82.75–87.5, the builder's own floor), from 宮下通り to the 美竹通り passage between the blocks.
   { id: 'miyashita_walk', name: '渋谷横丁', path: [[80.5, -106.5], [80.5, -169]], width: 4.5, surface: 'paving', lanterns: true, poles: false },
 ];
+
+// 道玄坂 corridor (pass 15): the walk across each zebra over 道玄坂 itself, pavement to pavement (the crowd's pavement
+// strips run along the street and never cross it): a few walkers use each, waiting for its green
+for (const c of DG.CROSSINGS) {
+  if (c.road !== 'dogenzaka' && c.road !== 'dogenzaka_ue') continue;
+  const r = ROADS.find((q) => q.id === c.road), q = DG.nearestOn(r.path, c.at[0], c.at[1]), nx = -q.tz, nz = q.tx, h = r.width / 2 + r.sidewalk * 0.6;
+  PEDESTRIAN_STREETS.push({ id: 'xw_' + c.id, name: '道玄坂', path: [[q.x + nx * h, q.z + nz * h], [q.x - nx * h, q.z - nz * h]], width: c.width - 1, surface: 'asphalt', poles: false, trees: false, crossing: true });
+}
 
 // ------------------------------------------------------------------------------------------------------ plazas
 const PLAZAS = [
@@ -327,6 +389,14 @@ const BUS_STOPS = [
     routes: [{ no: '渋71', to: '洗足駅', via: '代官山駅入口・目黒区総合庁舎', en: 'SENZOKU STA.' }],
     queue: [[182.7, 93.9], [182.6, 93.1], [182.5, 92.4], [182.4, 91.6], [182.3, 90.9], [182.2, 90.2], [182.1, 89.4], [182, 88.7]] },
 ];
+// 道玄坂上（交番前）: the up-hill kerb stop on 道玄坂 (OSM bus_stop node), served from the kerb lane of 'dogenzaka_ue'
+// (terminal 'dogenzaka': westExit.js leaves it alone, buildings/dogenzaka.js stands its pole and bench)
+{
+  const b = DG.BUS_STOP, r = ROADS.find((q) => q.id === b.road), q = DG.nearestOn(r.path, b.pole[0], b.pole[1]);
+  const lx = q.tz, lz = -q.tx;                                    // left of the up-hill direction = the pole's kerb
+  BUS_STOPS.push({ id: b.id, ref: b.ref, name: b.name, road: b.road, terminal: 'dogenzaka', kerb: 'left', op: b.op,
+    pos: [Math.round((q.x + lx * 5.2) * 10) / 10, Math.round((q.z + lz * 5.2) * 10) / 10], heading: facing(q.tx, q.tz), pole: b.pole });
+}
 // 渋谷町駅 東口 バスターミナル (the terminal-level data; the stops are in BUS_STOPS, its carriageway in BUSWAYS /
 // APRONS / RAISED). Layover = the buses standing in the 待機場所 [x, z, rotY, route no]; routeColors = the 系統 badge
 // colours of the 方向幕 / のりば plates.
@@ -528,6 +598,8 @@ const LANDMARKS = {
 // ------------------------------------------------------------------------------------------------------ blocks
 // Infill blocks (everything that is not a landmark). polygon in world [x, z]; the city module packs facades along
 // every edge. facadeTenants are cycled deterministically along the block faces.
+// `seedBase` (pass 15): the block's rng stream starts where it did before the corridor (city.js), so the blocks after
+// the re-laid 道玄坂 keep their faces although the lots of s2 / s4 / w1 changed
 const BLOCKS = [
   // ---- north-west: 宇田川町 / Center-gai
   { id: 'sanzenri_corner', polygon: [[-73, -23], [-42, -24], [-36, -30], [-65, -59], [-72, -57]], style: 'tenant', minStoreys: 6, maxStoreys: 8,
@@ -594,25 +666,76 @@ const BLOCKS = [
     facadeTenants: ['渋谷町駅 南改札', 'JP トラベルサービスセンター', 'ポッポ', 'ドトルコーヒー'] },
   { id: 'dogenzaka_s1', polygon: [[-78, 9], [-104, 9], [-118, 14], [-121, 40], [-118, 66], [-100, 61], [-62, 51], [-60, 44]], style: 'tenant', minStoreys: 3, maxStoreys: 8,
     facadeTenants: ['ビッグカメラ 渋谷ハチ公口店', '磯丸漁港', 'ファミリマート', 'スマイルバーガー', '焼鳥 おやひな屋', '松家', 'アコン', '岩崎ビル'] },
-  { id: 'dogenzaka_s2', polygon: [[-124, 16], [-150, 26], [-172, 34], [-168, 60], [-150, 84], [-126, 72]], style: 'entertainment', minStoreys: 6, maxStoreys: 14,
+  { id: 'dogenzaka_s2', seedBase: 179, polygon: [[-124, 16], [-150, 26], [-172, 34], [-168, 60], [-150, 84], [-126, 72]], style: 'entertainment', minStoreys: 6, maxStoreys: 14,
     facadeTenants: ['TOHOシネマ 渋谷町', '渋東シネタワー', 'ドトルコーヒー', 'タリース', '大戸家', 'ラウンドツー'] },
-  { id: 'dogenzaka_s3', polygon: [[-172, 36], [-176.3, 37.3], [-180.6, 38.7], [-184, 40], [-186.8, 41.3], [-189.5, 42.8], [-192, 44.8], [-194.5, 47.4], [-197.4, 50.5], [-200.2, 53.9], [-203, 57.3], [-205.3, 60.5], [-207.3, 63.9], [-209.3, 67.6], [-211.1, 71.3], [-212.7, 75.2], [-214.4, 79.3], [-216.2, 84.1], [-190, 86], [-160, 76]],   // pass 14: north-west edge on the re-laid 道玄坂's frontage style: 'tenant', minStoreys: 4, maxStoreys: 8,
-    facadeTenants: ['道玄坂調剤薬局', 'ファミリマート', '一風道', 'ホマレヤビル', '道玄坂歯科', '第二英鮨', '世界道'] },
-  { id: 'dogenzaka_s4', polygon: [[-160, 86], [-190, 92], [-216, 100], [-216, 130], [-176, 124], [-150, 104]], style: 'hotel', minStoreys: 3, maxStoreys: 7,
+  // (pass 15: dogenzaka_s3 — the compressed bend's south frontage — is gone: that stretch is now the corridor's real
+  //  frontage, buildings/dogenzaka.js; the lots of s2 / s4 / w1 that stand on a corridor building are dropped in city.js)
+  { id: 'dogenzaka_s4', seedBase: 198, polygon: [[-160, 86], [-190, 92], [-216, 100], [-216, 130], [-176, 124], [-150, 104]], style: 'hotel', minStoreys: 3, maxStoreys: 7,
     facadeTenants: ['ホテル・シルキー', 'コスモ渋谷館', '渋谷道玄坂ビル', '長岩医院', '加藤ビル', '東急ステー'] },
   // (pass 12: the 文化村通り face out to its building line — LABI, 洋服の青山, Taco Bell stand on it)
-  { id: 'dogenzaka_w1', polygon: [[-192, -43], [-198, -47.2], [-210.7, -57.1], [-220, -69], [-220, 38.6], [-219.4, 37.9], [-216, 33.9], [-212.5, 30.2], [-208.8, 26.4], [-203.7, 22.2], [-198.4, 19.1], [-193.8, 17], [-189, 15.1], [-186, 14.4], [-186, -2]],   // pass 14: south edge on the re-laid 道玄坂's bend style: 'tenant', minStoreys: 6, maxStoreys: 8,
+  { id: 'dogenzaka_w1', seedBase: 207, polygon: [[-192, -43], [-198, -47.2], [-210.7, -57.1], [-220, -69], [-220, 38.6], [-219.4, 37.9], [-216, 33.9], [-212.5, 30.2], [-208.8, 26.4], [-203.7, 22.2], [-198.4, 19.1], [-193.8, 17], [-189, 15.1], [-186, 14.4], [-186, -2]], style: 'tenant', minStoreys: 6, maxStoreys: 8,   // pass 14: south edge on the re-laid 道玄坂's bend (pass 15: its style fields had slipped into this comment — every lot came out 1 storey)
     facadeTenants: ['ヤマド電機 LABY', 'THE PRIMA', 'UNIQRO', '若槻ビル', '第六セントラルビル', 'マンボウ ネットカフェ'] },
-  { id: 'sakuragaoka_1', polygon: [[-42, 116], [-42, 152], [-75, 160], [-92, 156], [-98, 136], [-70, 124]], style: 'office', minStoreys: 7, maxStoreys: 10,
+  { id: 'sakuragaoka_1', seedBase: 222, polygon: [[-42, 116], [-42, 152], [-75, 160], [-92, 156], [-98, 136], [-70, 124]], style: 'office', minStoreys: 7, maxStoreys: 10,
     facadeTenants: ['渋谷駅前会館', '渋谷三菱ビルヂング', '日本旅遊', 'みずぼ銀行', '東急ハンド', 'THE RENGE'] },
-  { id: 'sakuragaoka_2', polygon: [[-100, 134], [-144, 152], [-158, 160], [-180, 178], [-176, 200], [-108, 190], [-78, 183], [-78, 164], [-96, 158]], style: 'hotel', minStoreys: 3, maxStoreys: 10,
+  { id: 'sakuragaoka_2', seedBase: 229, polygon: [[-100, 134], [-144, 152], [-158, 160], [-180, 178], [-176, 200], [-108, 190], [-78, 183], [-78, 164], [-96, 158]], style: 'hotel', minStoreys: 3, maxStoreys: 10,
     facadeTenants: ['渋谷SEDE', '照力ビル', '東京 FIVE BLD', 'ホテル・マヨビエンテ', 'セブンイレブ', 'SNT渋谷ビル', '大和ビル'] },
 ];
 
-// the 道玄坂 ramp's own line: 道玄坂下 from x −60, the re-laid 道玄坂, and on up its vista (streets.js VISTA, 150 m)
-const DOGEN_RAMP = (() => {
-  const r = ROADS.find((q) => q.id === 'dogenzaka'), p = r.path, a = p[p.length - 2], b = p[p.length - 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
-  return [[-60, -8.1], [-70, -9], [-100, -5], ...p, [b[0] + (b[0] - a[0]) / l * 150, b[1] + (b[1] - a[1]) / l * 150]];
+// the 道玄坂 ramp's own line (pass 14's straight-axis ramp, kept for the square): 道玄坂下 from x −60 and 道玄坂's head to
+// x −192.6, where the square and the true corridor meet. Pass 15 cuts it there (its compressed bend and vista are gone)
+// and caps its profile (`maxAlong`): the corridor's own ramp (DG_RAMP below) carries the street on up the hill.
+const DOGEN_RAMP = [[-60, -8.1], [-70, -9], [-100, -5], [-112, -3], [-121.2, 2.6], [-130.4, 7.3], [-139.8, 11.5], [-149.3, 15.1], [-159.8, 18.7], [-170.8, 22.3], [-180.2, 25.4], [-184.8, 26.9], [-188.9, 28.5], [-192.6, 30.2]];
+// …and the square's own south-west corner keeps the hill pass 14 gave it (西口通り / マークシティ west / 玉川通り's west end
+// rising 5–7 m toward the edge, like the real 道玄坂一丁目 / 桜丘 slope): that ramp's line through the compressed bend
+// and its vista, frozen, masked to the square south of the corridor (x > −250, z > 40) so it never reaches the corridor.
+const DOGEN_RAMP_SW = [[-60, -8.1], [-70, -9], [-100, -5], [-112, -3], [-121.2, 2.6], [-130.4, 7.3], [-139.8, 11.5], [-149.3, 15.1], [-159.8, 18.7], [-170.8, 22.3], [-180.2, 25.4], [-184.8, 26.9], [-188.9, 28.5], [-192.6, 30.2], [-196.6, 32.5], [-200.4, 35.6], [-203.5, 38.8], [-206.7, 42.2], [-209.8, 45.9], [-212.9, 49.7], [-215.7, 53.6], [-218.2, 57.7], [-220.4, 61.9], [-222.5, 66.1], [-224.3, 70.5], [-226, 74.7], [-227.9, 79.7], [-280.9, 220.1]];
+
+// The corridor's ground (pass 15): the GSI DEM along the OSM centre-line (dogenzakaData.js PROFILE, 12 m steps), less
+// the datum (道玄坂下 15.4 m = the game's 0): +0.7 m at the 109 fork, +3.6 at x −202, +8.1 at the 百軒店 crossing, +16.5
+// at 道玄坂上交番前, +19.9 on the 道玄坂上 plateau (4.5–4.8 % on the long middle stretch). Across the street it is level
+// for the frontage (`hw`: 13 m on the 109 side below s 110 as before, 40 m further up) and then falls away over `fade`.
+// Baked once on first use into a 2 m grid (bilinear): the per-frame height queries of walkers and cars stay cheap.
+const DG_RAMP = (() => {
+  const x0 = -588, z0 = -64, x1 = -124, z1 = 508, st = 4, nx = Math.round((x1 - x0) / st) + 1, nz = Math.round((z1 - z0) / st) + 1;
+  const segs = (pts) => { const a = []; for (let i = 0; i < pts.length - 1; i++) a.push(pts[i][0], pts[i][1], pts[i + 1][0] - pts[i][0], pts[i + 1][1] - pts[i][1]); return Float64Array.from(a); };
+  const C = segs(DG.CENTRE), CUM = [0];
+  for (let i = 0; i < C.length; i += 4) CUM.push(CUM[CUM.length - 1] + Math.hypot(C[i + 2], C[i + 3]));
+  const Lz = segs([...DG.DOGEN_PATH.filter((p) => p[0] <= -110)]), Lu = segs(DG.DOGEN_UE_PATH), Lt = segs(DG.TAMAGAWA_UE_PATH);
+  const dist2 = (S, x, z) => { let m = Infinity; for (let i = 0; i < S.length; i += 4) { const vx = S[i + 2], vz = S[i + 3], l2 = vx * vx + vz * vz || 1e-9; let t = ((x - S[i]) * vx + (z - S[i + 1]) * vz) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t; const dx = x - S[i] - vx * t, dz = z - S[i + 1] - vz * t, d = dx * dx + dz * dz; if (d < m) m = d; } return m; };
+  let grid = null;
+  const smooth = (t) => (t <= 0 ? 0 : t >= 1 ? 1 : t * t * (3 - 2 * t));
+  function value(x, z) {
+    // along: the nearest point of the OSM centre-line (its bends are gentle, ≤ 8°, so the arc length never jumps)
+    let m = Infinity, s = 0, side = 1;
+    for (let i = 0, k = 0; i < C.length; i += 4, k++) {
+      const vx = C[i + 2], vz = C[i + 3], l2 = vx * vx + vz * vz; let t = ((x - C[i]) * vx + (z - C[i + 1]) * vz) / l2; t = t < 0 ? 0 : t > 1 ? 1 : t;
+      const dx = x - C[i] - vx * t, dz = z - C[i + 1] - vz * t, d = dx * dx + dz * dz;
+      if (d < m) { m = d; s = CUM[k] + t * Math.sqrt(l2); side = vx * (z - C[i + 1]) - vz * (x - C[i]) > 0 ? 1 : -1; }
+    }
+    const h = DG.elevationAt(s) - DG.DATUM;
+    const d = Math.sqrt(Math.min(dist2(Lz, x, z), dist2(Lu, x, z), dist2(Lt, x, z)));
+    const north = side > 0, k = smooth((s - 110) / 40);
+    const hw = north ? 13 + 27 * k : 34 + 6 * k, fade = north ? 26 + 4 * k : 40 + 1.2 * Math.max(0, h);
+    // east of the 109 apex the square's own ramp alone (the corridor fades in over x −126 → −138)
+    const e = smooth((-126 - x) / 12);
+    if (d <= hw) return h * e;
+    const t = 1 - (d - hw) / fade;
+    return t <= 0 ? 0 : h * smooth(t) * e;
+  }
+  function bake() {
+    grid = new Float32Array(nx * nz);
+    for (let j = 0; j < nz; j++) for (let i = 0; i < nx; i++) grid[j * nx + i] = value(x0 + i * st, z0 + j * st);
+  }
+  return {
+    bb: [x0, x1, z0, z1],
+    y(x, z) {
+      if (x <= x0 || x >= x1 || z <= z0 || z >= z1) return 0;
+      if (!grid) bake();
+      const gx = (x - x0) / st, gz = (z - z0) / st, i = Math.min(nx - 2, gx | 0), j = Math.min(nz - 2, gz | 0), tx = gx - i, tz = gz - j, k = j * nx + i;
+      return (grid[k] * (1 - tx) + grid[k + 1] * tx) * (1 - tz) + (grid[k + nx] * (1 - tx) + grid[k + nx + 1] * tx) * tz;
+    },
+    value,
+  };
 })();
 
 // ------------------------------------------------------------------------------------------------------- CITY
@@ -633,7 +756,11 @@ export const CITY = {
     // lower street, 2–3× the real grade): the lower street now matches the DEM within 0.1 m; 6 % on the axis in the
     // bend is ≈ 4.8 % along the bending road (kept per game metre like 宮益坂 — the bend lies in the compressed west).
     // North (`halfWidthN`, the 109 side) narrow, south wide, as before.
-    { along: 'dogenzaka', apex: [-70, -19], dir: [-112, 43], path: DOGEN_RAMP, grades: [[-5, 0.0185], [60, 0.025], [92, 0.035], [128, 0.06], [300, 0]], ease: 12, halfWidth: 34, fade: 50, maxCross: 0.05, halfWidthN: 13, fadeN: 26 },
+    // (pass 15: cut at x −192.6 and capped at its along 124 m (+2.9 m), where the corridor ramp (`baked`) takes over:
+    // groundY is the max of the ramps, and the two agree within 0.2 m on the shared stretch x −130 … −192)
+    { along: 'dogenzaka', apex: [-70, -19], dir: [-112, 43], path: DOGEN_RAMP, grades: [[-5, 0.0185], [60, 0.025], [92, 0.035], [128, 0.06], [300, 0]], ease: 12, halfWidth: 34, fade: 50, maxCross: 0.05, halfWidthN: 13, fadeN: 26, maxAlong: 124 },
+    { along: 'dogenzaka_corridor', baked: DG_RAMP },
+    { along: 'dogenzaka_sw', apex: [-70, -19], dir: [-112, 43], path: DOGEN_RAMP_SW, grades: [[-5, 0.0185], [60, 0.025], [92, 0.035], [128, 0.06], [300, 0]], ease: 12, halfWidth: 34, fade: 50, maxCross: 0.05, halfWidthN: 13, fadeN: 26, mask: { x0: -250, x1: -228, z0: 40, z1: 85 } },
     { along: 'bunkamura', rise: 0.028, apex: [-116, -15], dir: [-114, -82], halfWidth: 14, fade: 24, maxRun: 190, ease: 30 },
     // 宮益坂 (pass 14, client: 「宮益坂が平らになっているから坂を作って」). Real profile from the GSI 1 m laser DEM along the
     // OSM centre-line (ways 213526434 / 375809353): 宮益坂下 17.9 m → 19.2 m at +30 m (4.3 %) → 25.1 m at +140 m →
@@ -680,7 +807,16 @@ export const CITY = {
   },
   minimap: { size: 512, scale: 1.1 },
   tenantPools: T,
+  // pass 15: the playable 道玄坂 corridor beyond the square's west edge (true metres). `outline` = its bounds polygon
+  // (the city's walls follow it outside the square), `roads` = the ids laid in it, `koban` = 道玄坂上交番.
+  corridor: { id: 'dogenzaka', name: '道玄坂', outline: DG.CORRIDOR, roads: ['dogenzaka', 'dogenzaka_ue', 'tamagawa_ue'], koban: DG.KOBAN, halfWidth: DG.CORR_HW },
+  // named areas the HUD checks before the streets (道玄坂上 round the koban and the junction)
+  areas: DG.AREAS,
+  // the pause map's frame [x0, z0, x1, z1]: the square and the corridor up to 道玄坂上
+  worldMapBox: [-545, -230, 232, 455],
 };
+/** True if (x, z) is inside the 道玄坂 corridor's outline (true-metre corridor west of the square). */
+export function inCorridor(x, z) { return pointInPolygon(x, z, CITY.corridor.outline); }
 
 // ----------------------------------------------------------------------------------------------------- helpers
 const v3 = (x, z) => new THREE.Vector3(x, groundY(x, z), z);
@@ -771,6 +907,7 @@ export function pointInPolygon(x, z, poly) {
  *  sample it anywhere. The whole world follows this one function. */
 export const SLOPED = true;
 const RAMPS = CITY.ground.slope.map((s) => {
+  if (s.baked) return s;                                                      // the corridor's own baked grid
   const dl = s.dir ? Math.hypot(s.dir[0], s.dir[1]) : 1;
   const r = { ...s, ux: s.dir ? s.dir[0] / dl : 0, uz: s.dir ? s.dir[1] / dl : 0, ease: s.ease || 1, halfWidthN: s.halfWidthN ?? s.halfWidth, fadeN: s.fadeN ?? s.fade };
   if (s.path) {
@@ -787,12 +924,13 @@ const RAMPS = CITY.ground.slope.map((s) => {
     // grade profile: g(a) = Σ Δg_k · clamp((a − a_k) / ease, 0, 1), integrated in closed form (C¹ height, no kinks)
     let prev = 0;
     r.steps = s.grades.map(([a, g]) => { const d = g - prev; prev = g; return [a, d]; });
-    r.top = profileY(r, r.total || 1e6);
+    r.top = profileY(r, s.maxAlong != null ? Math.min(s.maxAlong, r.total || 1e6) : (r.total || 1e6));
   } else r.top = s.rise * (s.maxRun - r.ease);
   if (s.path) {                                                               // reject box: the widest fade it can make
     const m = Math.max(r.halfWidth + (r.maxCross ? Math.max(r.fade, 1.5 * r.top / r.maxCross) : r.fade), r.halfWidthN + r.fadeN);
     r.bb = [Math.min(...s.path.map((q) => q[0])) - m, Math.max(...s.path.map((q) => q[0])) + m, Math.min(...s.path.map((q) => q[1])) - m, Math.max(...s.path.map((q) => q[1])) + m];
   }
+  if (r.mask) r.inner = { ...r, mask: null };
   return r;
 });
 function profileY(s, along) {
@@ -830,11 +968,19 @@ function pathFrame(s, x, z, wantAlong = false) {
   return _pf;
 }
 function rampY(s, x, z) {
+  if (s.baked) return s.baked.y(x, z);
+  if (s.mask) {
+    const M = s.mask, u = (x - M.x0) / (M.x1 - M.x0), v = (z - M.z0) / (M.z1 - M.z0);
+    if (u <= 0 || v <= 0) return 0;
+    const m = (u >= 1 ? 1 : u * u * (3 - 2 * u)) * (v >= 1 ? 1 : v * v * (3 - 2 * v));
+    return m * rampY(s.inner, x, z);
+  }
   if (s.path) {
     const f = pathFrame(s, x, z); if (!f) return 0;
     // along: the straight axis (a smooth tilted plane — the path's own arc length jumps across the inside of a bend);
     // sideways: the distance to the real, bending street
-    const h = profileY(s, (x - s.apex[0]) * s.ux + (z - s.apex[1]) * s.uz), lateral = Math.abs(f.lat), hw = f.lat > 0 ? s.halfWidthN : s.halfWidth;
+    const al = (x - s.apex[0]) * s.ux + (z - s.apex[1]) * s.uz;
+    const h = profileY(s, s.maxAlong != null && al > s.maxAlong ? s.maxAlong : al), lateral = Math.abs(f.lat), hw = f.lat > 0 ? s.halfWidthN : s.halfWidth;
     // the fade widens with the height it has to lose (`maxCross`: the steepest sideways grade it may make), so a high
     // upper street does not drop off a cliff into the streets beside it (西口通り beside the bend / vista of 道玄坂)
     const fd = f.lat > 0 ? s.fadeN : (s.maxCross ? Math.max(s.fade, 1.5 * h / s.maxCross) : s.fade);

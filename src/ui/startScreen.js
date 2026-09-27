@@ -8,7 +8,7 @@ const SAVE = 'shibuya.save.v1', SETTINGS = 'shibuya.settings.v1';
 const FACTS = {
   letter: ['柊 誠司', '同期・かつての親友', '十年前の事件の真相を話したい、という手紙が届いた。約束は10月1日の20時、渋谷町のハチ公前。'],
   junior: ['商社時代の後輩', 'ハチ公前で救出', '後輩も柊に呼ばれ、ハチ公前で待っていた。玄凪会の男たちに絡まれたところを健人が救出。'],
-  fightclub_conflict: ['ファイトクラブ', '撮影をきっかけに対立', '朝比奈未空・朝比奈快・那珂川天真。ホストから金を取る場面を撮影され、衝突した。'],
+  fightclub_conflict: ['ファイトクラブ', '撮影をきっかけに対立', '朝比奈未空・朝比奈快・那珂川天真。倒れたホストに詰め寄る場面を撮影され、一方的な暴力だと誤解されて衝突した。'],
   fightclub_allies: ['ファイトクラブ', '誤解を解いた仲間', '後輩の証言とホストへの確認で誤解が解けた。3人と協力して街の背後にある力を探る。'],
   messengers: ['ハチ公前の男たち', '柊からの伝言を持つ', '健人に接触し、柊の名前を口にした。柊との詳しい関係は不明。'],
   reunion: ['柊 誠司', '再会した親友', '支社入口の構成員との戦闘後、支社から出てきた柊と再会。かつての商社マンとは異なる、冷たい態度を見せる。'],
@@ -31,7 +31,7 @@ export function createStartScreen(engine, menus) {
   const css = document.createElement('link'); css.rel = 'stylesheet'; css.href = '/shibuya-cho/src/ui/startScreen.css'; document.head.append(css);
   const relationCss = document.createElement('link'); relationCss.rel='stylesheet'; relationCss.href='/shibuya-cho/src/ui/relationshipMap.css'; document.head.append(relationCss);
   let relationView=null;
-  const relationFacts=()=>f.started?[...f.facts]:f.saved()?.facts||INITIAL_FACTS;
+  const relationFacts=()=>[...f.facts];
   const el = document.createElement('section'); el.id = 'start-screen'; el.setAttribute('aria-label', 'ツインドラゴン 開始メニュー');
   document.body.append(el);
   const f = { engine, active: false, started: false, facts: new Set(INITIAL_FACTS), page: 'home', elapsed: 0, lastSave: 0, dirty: true };
@@ -46,17 +46,20 @@ export function createStartScreen(engine, menus) {
   f.render = () => {
     entrance.stop();
     relationView?.destroy(); relationView=null;
+    // Relationship information belongs to the current playthrough, not the title menu.
+    if (f.page === 'relations' && !f.started) f.page = 'home';
     const saved = f.saved();
+    el.setAttribute('aria-label', f.page === 'relations' ? '人物相関図' : 'ツインドラゴン メニュー');
     el.dataset.page = f.page;
     let content = '';
-    if (f.page === 'home') content = `<div class="brand"><p class="eyebrow">A STORY OF TRUST & BETRAYAL</p><h1 class="title-logo"><img src="/shibuya-cho/assets/menu/twin-dragon-logo-v1.png" width="1774" height="887" alt="ツインドラゴン — TWIN DRAGON"></h1><p class="tagline">十年ぶりの街。<br>一通の手紙。終わらない過去。</p></div><nav aria-label="開始メニュー">${button('new','ニューゲーム','NEW GAME')}${button('load','ロードゲーム','LOAD GAME')}${button('settings','設定','SETTINGS')}${button('relations','相関図','RELATIONSHIPS')}</nav><p class="save-note">${saved ? '保存あり · '+new Date(saved.at).toLocaleString('ja-JP') : '保存データなし · 探索中に自動保存'}</p>`;
+    if (f.page === 'home') content = `<div class="brand"><p class="eyebrow">A STORY OF TRUST & BETRAYAL</p><h1 class="title-logo"><img src="/shibuya-cho/assets/menu/twin-dragon-logo-v1.png" width="1774" height="887" alt="ツインドラゴン — TWIN DRAGON"></h1><p class="tagline">十年ぶりの街。<br>一通の手紙。終わらない過去。</p></div><nav aria-label="開始メニュー">${button('new','ニューゲーム','NEW GAME')}${button('load','ロードゲーム','LOAD GAME')}${button('settings','設定','SETTINGS')}</nav><p class="save-note">${saved ? '保存あり · '+new Date(saved.at).toLocaleString('ja-JP') : '保存データなし · 探索中に自動保存'}</p>`;
     if (f.page === 'load') content = `<h2>ロードゲーム</h2><p class="lead">最後に保存された探索地点から再開します。</p>${saved ? `<div class="save-card"><span>AUTO SAVE / 01</span><h3>${({1:'第一章・ハチ公前へ',3:'第一章クリア後・自由探索',4:'第一章・センター街へ',6:'第一章・ファイトクラブとの遭遇',8:'第一章・玄凪会支社へ',10:'第一章・柊との再会'})[saved.step]}</h3><p>${new Date(saved.at).toLocaleString('ja-JP')}</p><p>所持金 ¥${saved.yen.toLocaleString('ja-JP')} · 判明情報 ${saved.facts.length}件</p>${button('resume','このデータで再開','CONTINUE')}</div>` : '<div class="empty">読み込める保存データがありません。<p>ニューゲームを始めると、探索中に自動保存されます。</p></div>'}`;
     if (f.page === 'new') content = `<h2>新しい物語を始める</h2><p class="lead">現在の自動保存は、新しい物語の保存時に置き換わります。</p>${button('begin','ニューゲームを開始','START')}`;
     if (f.page === 'settings') { const a = engine.get('audio'); content = `<h2>設定</h2><p class="lead">変更はすぐに適用・保存されます。</p><label class="setting">マスター音量 <output id="volume-value">${Math.round((a?.getVolume?.() ?? .75)*100)}%</output><input aria-label="マスター音量" type="range" min="0" max="100" value="${Math.round((a?.getVolume?.() ?? .75)*100)}" data-setting="volume"></label><label class="setting check">ミュート<input type="checkbox" data-setting="muted" ${a?.muted ? 'checked' : ''}></label><label class="setting">カメラ感度 <output id="sensitivity-value">${f.settings.sensitivity.toFixed(1)}×</output><input aria-label="カメラ感度" type="range" min="0.5" max="2" step="0.1" value="${f.settings.sensitivity}" data-setting="sensitivity"></label><label class="setting">HUD表示<select data-setting="hud"><option value="normal" ${f.settings.hud==='normal'?'selected':''}>標準</option><option value="compact" ${f.settings.hud==='compact'?'selected':''}>コンパクト</option></select></label>`; }
     if (f.page === 'relations') {
       content = renderRelationshipMap(relationFacts());
     }
-    el.innerHTML = `${titleCharacters()}<div class="title-slash" aria-hidden="true"></div><div class="screen-shade"></div><div class="screen-content ${f.page==='home'?'home':'panel'}">${content}<p role="status" aria-live="polite"></p>${f.page!=='home' ? button('back','戻る','BACK') : ''}</div>${f.page==='home' ? '<button type="button" class="title-replay" data-action="title-replay">演出を再生 ↻</button>' : ''}<footer><span>TWIN DRAGON <i>／</i> ツインドラゴン</span><span>↑ ↓ 選択　Enter 決定　Esc 戻る</span></footer>`;
+    el.innerHTML = `${titleCharacters()}<div class="title-slash" aria-hidden="true"></div><div class="screen-shade"></div><div class="screen-content ${f.page==='home'?'home':'panel'}">${content}<p role="status" aria-live="polite"></p>${f.page!=='home' ? button('back',f.started && f.page==='relations'?'ポーズ画面に戻る':'戻る','BACK') : ''}</div>${f.page==='home' ? '<button type="button" class="title-replay" data-action="title-replay">演出を再生 ↻</button>' : ''}<footer><span>TWIN DRAGON <i>／</i> ツインドラゴン</span><span>↑ ↓ 選択　Enter 決定　Esc 戻る</span></footer>`;
     if(f.page==='relations') relationView=mountRelationshipMap(el,relationFacts);
     requestAnimationFrame(() => el.querySelector('button')?.focus({preventScroll:true}));
     if (f.page === 'home') entrance.play();
@@ -102,7 +105,7 @@ export function createStartScreen(engine, menus) {
     if(action==='new') { if(f.saved()) { f.page='new';f.render(); } else f.begin(); }
     else if(action==='begin') f.begin();
     else if(action==='resume') { const s=f.saved(); if(s)f.begin(s); else {f.page='load';f.render();} }
-    else if(action==='back') { if(f.started) {f.close();menus.el.pause.classList.add('on');} else { f.page='home';f.render(); } }
+    else if(action==='back') { if(f.started) {const page=f.page;f.close();menus.el.pause.classList.add('on');menus.el.pause.querySelector(`[data-pause-page="${page}"]`)?.focus();} else { f.page='home';f.render(); } }
     else { f.page=action;f.render(); }
   });
   el.addEventListener('input',ev => {

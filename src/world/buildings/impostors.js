@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import * as L from './lib.js';
 import { VISTA } from './streets.js';
 import * as S from './shared.js';
+import { BACKDROP_TRUE } from '../dogenzakaData.js';
 
 let M = null;
 /** Lit windows and lamps pierce the night haze: the emissive term is added back after the fog mix (k = share of the
@@ -99,6 +100,24 @@ export function buildImpostors(ctx) {
   const R = mats();
   const half = ctx.CITY.bounds / 2;
   const seaBatch = new L.GeoBatch();
+  // pass 15: the 道玄坂 corridor is real city (buildings/dogenzaka.js): no impostor box inside its outline or within a
+  // box's reach of it; the real tall masses behind its frontage (PLATEAU footprints 42–110 m off the street: 渋谷ソラスタ
+  // 108.7 m, the hotels round 円山町 …) stand there instead, as lit-window prisms on their own footprints
+  const corr = ctx.CITY.corridor && ctx.CITY.corridor.outline;
+  const t246 = ctx.CITY.roads.filter((q) => q.id === 'tamagawa_ue');
+  const nearCorr = (x, z, r) => {
+    for (const q of t246) for (let i = 0; i < q.path.length - 1; i++) if (L.distToSegment(x, z, q.path[i][0], q.path[i][1], q.path[i + 1][0], q.path[i + 1][1]) < r + 8) return true;
+    if (!corr) return false;
+    if (L.pointInPoly(x, z, corr)) return true;
+    for (let i = 0, j = corr.length - 1; i < corr.length; j = i++) if (L.distToSegment(x, z, corr[j][0], corr[j][1], corr[i][0], corr[i][1]) < r) return true;
+    return false;
+  };
+  for (const [k, b] of BACKDROP_TRUE.entries()) {
+    const c = L.polyCentroid(b.poly), y0 = yAt(c[0], c[1]) - 1.5, du = Math.floor(L.hash(k, 1, 83) * 16) * 3;
+    seaBatch.add(b.h > 55 ? R.tower : R.sea, L.extrudePolygon(b.poly, y0, y0 + b.h + 1.5, { cap: false, faceUV: (i) => ({ su: 1 / 48, sv: 1 / 140, u0: du + i * 7, v0: Math.floor(L.hash(k, i, 84) * 40) * 3.5 }) }), c[0], c[1]);
+    seaBatch.add(R.deck, L.polygonCap(b.poly, y0 + b.h + 1.5, 0.25), c[0], c[1]);
+    if (b.h > 45) seaBatch.add(R.red, L.boxAt(c[0], y0 + b.h + 2.5, c[1], 1.2, 1.0, 1.2, 0, false));
+  }
   // ring of boxes: density falls with distance; sizes grow so far rows still read as a skyline
   const n = 1400;
   let placed = 0;
@@ -107,6 +126,7 @@ export function buildImpostors(ctx) {
     const d = half + 24 + Math.pow(rng(), 0.7) * 560;
     const x = Math.cos(a) * d, z = Math.sin(a) * d;
     if (Math.abs(x) < half + 12 && Math.abs(z) < half + 12) continue;
+    if (nearCorr(x, z, 24 + Math.pow(Math.max(0, d - half) / 560, 1) * 40)) continue;
     if (vista.some(v => L.distToSegment(x, z, v.a[0], v.a[1], v.b[0], v.b[1]) < v.clear)) continue;   // keep the 道玄坂 / 文化村通り vistas open
     const far = (d - half) / 560;
     const w = rng.range(14, 30) * (1 + far * 1.5), dd = rng.range(14, 30) * (1 + far * 1.5);
@@ -148,11 +168,13 @@ export function buildImpostors(ctx) {
   }
   // named far towers (approximate real bearings from the crossing, compressed distances)
   const towers = [
-    { x: -330, z: 250, w: 46, d: 40, h: 184, name: 'cerulean' },          // セルリアンタワー (SW, ~400 m real)
+    // セルリアンタワー (SSW, 362 m real, OSM 55441040 at (−101, 348)): pass 15 moved it off the corridor's flank, where the
+    // old compressed placement (−330, 250) stood a 184 m tower beside 道玄坂上交番 — just south of the square's 玉川通り
+    { x: -112, z: 262, w: 46, d: 40, h: 184, name: 'cerulean' },
     { x: -60, z: -720, w: 40, d: 40, h: 235, name: 'shinjuku1' }, { x: 10, z: -760, w: 48, d: 44, h: 243, name: 'shinjuku2' }, { x: -140, z: -740, w: 44, d: 40, h: 225, name: 'shinjuku3' }, { x: 80, z: -700, w: 36, d: 36, h: 200, name: 'shinjuku4' }, { x: -230, z: -690, w: 60, d: 50, h: 210, name: 'shinjuku5' },
     { x: 700, z: -260, w: 56, d: 56, h: 238, name: 'roppongi' }, { x: 640, z: -180, w: 44, d: 44, h: 200, name: 'azabudai' },
     { x: 330, z: 380, w: 40, d: 40, h: 140, name: 'ebisu' }, { x: 420, z: 320, w: 36, d: 36, h: 120, name: 'ebisu2' },
-    { x: -520, z: 80, w: 40, d: 40, h: 96, name: 'shoto' },
+    // (pass 15: the 'shoto' tower at (−520, 80) went — in true metres that is 円山町's low-rise, beside the corridor)
   ];
   for (const [k, t] of towers.entries()) tallBox(seaBatch, R, t.x, yAt(t.x, t.z), t.z, t.w, t.h, t.d, rng.range(0, 0.6), 700 + k);
   const meshes = seaBatch.build(group, { castShadow: false, receiveShadow: false, name: 'impostor' });

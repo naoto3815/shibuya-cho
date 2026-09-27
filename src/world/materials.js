@@ -1229,7 +1229,8 @@ export function bindWetField(field) {
   const old = U.field.value;
   U.field.value = t;
   if (old && old !== t) old.dispose();
-  U.fieldT.value.set(-R - step / 2, -R - step / 2, 1 / (N * step), 1);   // texel centres on the grid points
+  // texel centres on the grid points; [city] pass 15: the grid's corner is (field.x0, field.z0) when it is not centred
+  U.fieldT.value.set((field.x0 != null ? field.x0 : -R) - step / 2, (field.z0 != null ? field.z0 : -R) - step / 2, 1 / (N * step), 1);
   fieldCPU = field;
   return true;
 }

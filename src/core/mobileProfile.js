@@ -1,7 +1,7 @@
 // [mobile] Phone / tablet profile. main.js imports this FIRST, so it runs before any module has read location.search.
 //   ?mobile=1  forces the mobile quality profile on a desktop     ?mobile=0  turns it off on a phone (auto on phones/tablets)
 //   ?touch=1   forces the on-screen controls                      ?touch=0   hides them (auto on touch / coarse pointers)
-//   ?tier=mobile|safe  picks the phone tier by hand (it is consumed: the choice is remembered, the switch leaves the URL)
+//   ?tier=high|mobile|safe  picks the phone tier by hand (it is consumed: the choice is remembered, the switch leaves the URL)
 // The quality profile is the game's own URL switches (docs/PLAY.md, docs/reports/mobile.md), written into the address
 // with history.replaceState before any module reads them. A switch already in the URL wins, so every knob can still be
 // A/B'd by hand (?mobile=1&peds=1). Switches this profile wrote on an earlier load are recognised and re-decided.
@@ -49,11 +49,23 @@ const K_BOOT = 'shibuya.boot.v1', K_PROFILE = 'shibuya.profile.v1';
 //   audio            'lite': a 22 kHz audio context and two of the four battle-music stems (decoded audio is float32)
 //   vatK / vatClips  the crowd's vertex-animation bake: frames per clip scaled, and only these clips (the rest fall back)
 //   matTex           (safe) the procedural material sets are generated at this size (1024 as authored)
+//   resstart / resmin / resmax   the render ratio (CSS px -> render px) the governor starts at and may move between
+// Tiers, heaviest first. A boot that dies steps the next load DOWN one tier (high -> mobile -> safe); a tier that
+// survived stays (sticky) until the player asks for another (the notice's retry button, or ?tier=high|mobile|safe).
+export const TIER_ORDER = ['high', 'mobile', 'safe'];
 export const TIERS = {
+  // large, high-DPR phones and tablets (a long side >= 844 CSS px at DPR >= 3, or an iPad): a sharp picture first —
+  // 1.5 CSS px start (the governor between 1.0 and 2.0), SMAA with quarter-res AO, larger textures, shadows every frame,
+  // a quarter-res wet-road mirror. Measured to stay well under the ~2.3 GB this class of phone died at (reports/mobile.md).
+  high: {
+    peds: '0.5', cars: '80', scanPool: '8', scanPer: '1', scanMid: '16', pedScans: '12', pool: '20', msaa: '0', postfx: 'q1',
+    texmax: '512', canvasK: '0.5', scanTex: '512', pedTex: '256', heroTex: '1024', shadow: '2048', shadowEvery: '1', mirror: '0.25', audio: 'lite',
+    vatK: '0.6', vatClips: 'walk,idle,run', resstart: '1.5', resmin: '1', resmax: '2',
+  },
   mobile: {
     peds: '0.4', cars: '70', scanPool: '6', scanPer: '1', scanMid: '12', pedScans: '12', pool: '12', msaa: '0', postfx: 'q0',
     texmax: '384', canvasK: '0.5', scanTex: '512', pedTex: '256', heroTex: '1024', shadow: '1024', shadowEvery: '2', mirror: '0', audio: 'lite',
-    vatK: '0.5', vatClips: 'walk,idle,run',
+    vatK: '0.5', vatClips: 'walk,idle,run', resstart: '1', resmin: '0.75',
   },
   // after a boot that never finished: everything lighter again, no shadows, no shop interiors, a fixed 0.75 render ratio
   safe: {
@@ -70,6 +82,13 @@ const CRASHED = !!(prevBoot && prevBoot.state === 'running' && Date.now() - (pre
 const prevProfile = LS.get(K_PROFILE) || {};
 
 // ---- tier + URL
+// the device's own tier: a large high-DPR phone (the long side >= 844 CSS px at DPR >= 3: iPhone 12-16 non-mini, Pro Max)
+// or an iPad gets 'high'; every other phone 'mobile'
+const scr = typeof screen !== 'undefined' ? screen : { width: 0, height: 0 };
+const DPR0 = typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1;
+const isIPad = iPadOS || /iPad/.test(ua);
+export const DEVICE_TIER = isIPad || (Math.max(scr.width, scr.height) >= 844 && DPR0 >= 3) ? 'high' : 'mobile';
+const down = (t) => TIER_ORDER[Math.min(TIER_ORDER.length - 1, Math.max(0, TIER_ORDER.indexOf(t)) + 1)];
 const injected = {};
 let TIER = 'desktop';
 if (MOBILE && typeof history !== 'undefined' && history.replaceState) {
@@ -77,12 +96,12 @@ if (MOBILE && typeof history !== 'undefined' && history.replaceState) {
   if (prevProfile.params) for (const [k, v] of Object.entries(prevProfile.params)) if (q.get(k) === v) q.delete(k);
   const asked = q.get('tier');
   q.delete('tier');
-  let sticky = prevProfile.sticky || null;
-  if (asked === 'mobile' || asked === 'safe') sticky = asked === 'safe' ? 'safe' : null;
-  else if (CRASHED) sticky = 'safe';
-  TIER = asked === 'mobile' ? 'mobile' : sticky === 'safe' ? 'safe' : 'mobile';
+  let sticky = TIERS[prevProfile.sticky] ? prevProfile.sticky : null;
+  if (TIERS[asked]) sticky = asked === DEVICE_TIER ? null : asked;                 // asked by hand: remembered
+  else if (CRASHED) sticky = down(prevBoot.tier && TIERS[prevBoot.tier] ? prevBoot.tier : (prevProfile.tier || DEVICE_TIER));   // one step down
+  TIER = TIERS[asked] ? asked : sticky || DEVICE_TIER;
   for (const [k, v] of Object.entries(TIERS[TIER])) if (!q.has(k)) { q.set(k, v); injected[k] = v; }
-  LS.set(K_PROFILE, { tier: TIER, sticky, params: injected });
+  LS.set(K_PROFILE, { tier: TIER, sticky, device: DEVICE_TIER, params: injected });
   const s = q.toString();
   try { history.replaceState(history.state, '', location.pathname + (s ? '?' + s : '') + location.hash); }
   catch (e) { console.warn('[mobile] could not apply the profile to the URL', e); }
@@ -163,10 +182,11 @@ if (MOBILE && typeof window !== 'undefined') {
 // ---------------------------------------------------------------- the notice after a crash
 const STAGE_JA = [
   [/^script/, 'スクリプト読み込み'], [/^import/, 'モジュール読み込み'], [/^init:(\w+)/, (m) => `初期化: ${m[1]}`], [/^atlas/, '看板・壁のテクスチャ作成'],
-  [/^warm:tex/, 'テクスチャ転送'], [/^warm:prog/, 'シェーダー準備'], [/^precompile/, 'シェーダー準備'], [/^frame/, '最初の描画'], [/^ready/, '読み込み完了'],
+  [/^warm:tex/, 'テクスチャ転送'], [/^warm:(prog|post|link)/, 'シェーダー準備'], [/^warm:draw/, '最初の描画（画面の裏）'], [/^long/, '長いフレーム'], [/^precompile/, 'シェーダー準備'], [/^frame/, '最初の描画'], [/^ready/, '読み込み完了'],
   [/^crowd/, '群衆の準備（歩行者の読み込み・アニメーション焼き込み）'], [/^title/, 'タイトル画面'], [/^video/, 'オープニング動画'], [/^arrival/, '渋谷への降下'], [/^play/, 'プレイ中'],
 ];
 const stageJa = (s) => { for (const [re, l] of STAGE_JA) { const m = String(s).match(re); if (m) return typeof l === 'function' ? l(m) : l; } return s; };
+const TIER_JA = { high: '高画質', mobile: '標準', safe: 'セーフモード' };
 function showCrashNotice() {
   const b = prevBoot, m = b.mem || {};
   const el = document.createElement('div');
@@ -181,15 +201,16 @@ function showCrashNotice() {
     `<div style="color:#cfc2a2">メモリ推定: canvas ${esc(m.cv ?? '-')}MB · GPU ${esc(m.gpu ?? '-')}MB · 音声 ${esc(m.au ?? '-')}MB${m.heap != null ? ' · JS ' + esc(m.heap) + 'MB' : ''} · 設定 ${esc(b.tier || '-')}</div>` +
     (b.fetch ? `<div style="color:#8f887a;font-size:11px">最後の読み込み: ${esc(b.fetch)}</div>` : '') +
     (trail ? `<div style="color:#8f887a;font-size:11px">${trail}</div>` : '') +
-    `<div style="margin-top:6px">${TIER === 'safe' ? '今回は<b>セーフモード</b>（さらに軽い設定）で起動します。' : '今回は通常のモバイル設定で起動します。'}</div>` +
+    `<div style="margin-top:6px">${TIER !== (b.tier || '') ? `今回は1段軽い設定（<b>${TIER_JA[TIER]}</b>）で起動します。` : `今回も同じ設定（${TIER_JA[TIER]}）で起動します。`}</div>` +
     `<div style="display:flex;gap:10px;margin-top:8px;flex-wrap:wrap">` +
-    (TIER === 'safe' ? '<button data-a="retry" style="padding:9px 14px;background:#d9b45a;color:#100d06;border:0;font-weight:700">通常のモバイル設定で再試行</button>' : '<button data-a="safe" style="padding:9px 14px;background:#d9b45a;color:#100d06;border:0;font-weight:700">セーフモードで起動</button>') +
+    (TIER !== DEVICE_TIER ? `<button data-a="retry" style="padding:9px 14px;background:#d9b45a;color:#100d06;border:0;font-weight:700">元の設定（${TIER_JA[DEVICE_TIER]}）で再試行</button>` : '') +
+    (TIER !== 'safe' ? '<button data-a="safe" style="padding:9px 14px;background:transparent;color:#f3e6c4;border:1px solid #d9b45a">セーフモードで起動</button>' : '') +
     '<button data-a="close" style="padding:9px 14px;background:transparent;color:#f3e6c4;border:1px solid #6e5c3e">閉じる</button></div>' +
     `<div style="color:#6f6a5e;font-size:10px;margin-top:4px">${esc(b.ua || '')} · ${new Date(b.at).toLocaleString('ja-JP')}</div>`;
   el.addEventListener('click', (e) => {
     const a = e.target && e.target.dataset && e.target.dataset.a;
     if (a === 'close') el.remove();
-    else if (a === 'retry' || a === 'safe') { LS.set(K_BOOT, null); location.replace(location.pathname + '?tier=' + (a === 'retry' ? 'mobile' : 'safe')); }
+    else if (a === 'retry' || a === 'safe') { LS.set(K_BOOT, null); location.replace(location.pathname + '?tier=' + (a === 'retry' ? DEVICE_TIER : 'safe')); }
   });
   for (const t of ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'touchstart']) el.addEventListener(t, (e) => e.stopPropagation());
   document.body.appendChild(el);
@@ -212,7 +233,11 @@ export function attachBreadcrumbs(engine) {
     crumb('frame', '1');
     const tick = (now) => {
       n++; crumbs.frames = n;
-      if (last) { const dt = now - last; if (dt > crumbs.longest) { crumbs.longest = dt; crumbs.longestAt = `frame ${n} ${crumbs.stage}`; } }
+      if (last) {
+        const dt = now - last;
+        if (dt > crumbs.longest) { crumbs.longest = dt; crumbs.longestAt = `frame ${n} ${crumbs.stage}`; }
+        if (dt > 400) { const L = window.__longFrames || (window.__longFrames = []); if (L.length < 20) L.push(`${Math.round(dt)}ms f${n} ${crumbs.stage}`); crumbs.trail.push(`long ${Math.round(dt)}ms ${crumbs.stage}`); }
+      }
       last = now;
       if (n <= 6) crumb('frame', String(n + 1));
       requestAnimationFrame(tick);
@@ -269,7 +294,7 @@ function installWarmup(engine) {
     const pf = engine.get('postfx'), rt = pf && pf.sceneRT && pf.enabled !== false && !pf.bypass ? pf.sceneRT : null, prev = r.getRenderTarget();
     try {
       r.setRenderTarget(rt);                              // the scene target's variant (tone mapping / colour space are program parameters)
-      while (oi < objs.length && performance.now() - t0 < BUDGET) { try { r.compile(objs[oi], engine.camera, engine.scene); } catch (e) { /* */ } oi++; }
+      while (oi < objs.length && performance.now() - t0 < BUDGET) { try { comp(objs[oi], engine.camera, engine.scene); } catch (e) { /* */ } oi++; }
       W.prog = oi;
     } finally { r.setRenderTarget(prev); }
     if (oi < objs.length) { say('prog', oi, objs.length); return; }
@@ -287,16 +312,26 @@ function installWarmup(engine) {
       const prev2 = r.getRenderTarget();
       try {
         r.setRenderTarget(pf && pf.composer ? pf.composer.renderTarget1 : null);
-        while (pi < post.length && performance.now() - t0 < BUDGET) { quad.material = post[pi]; try { r.compile(quad, engine.camera); } catch (e) { /* */ } pi++; }
+        while (pi < post.length && performance.now() - t0 < BUDGET) { quad.material = post[pi]; try { comp(quad, engine.camera); } catch (e) { /* */ } pi++; }
       } finally { r.setRenderTarget(prev2); }
       say('post', pi, post.length); return;
     }
     // last: one whole frame drawn while still covered — shadow maps, the remaining variants and the vertex buffers go
     // up here, behind the title, instead of in the first frame the player sees
+    // (with parallel compile the links finish in the background: the hidden draw waits for them, or a draw would block on them)
+    if (pending.length && !linked) {
+      if (!waitAt) { waitAt = performance.now(); Promise.all(pending).then(() => { linked = true; }); }
+      if (performance.now() - waitAt < 15000) { say('link', pending.length, pending.length); return; }
+    }
     if (!drawn) { drawn = true; drawNow = true; say('draw', 1, 1); return; }
     done = true; W.done = true; engine.events.emit('warm', `done ${tex.length} tex / ${objs.length} objects / ${post.length} post`);
   };
-  let post = null, pi = 0, quad = null, drawn = false, drawNow = false;
+  let post = null, pi = 0, quad = null, drawn = false, drawNow = false, linked = false, waitAt = 0;
+  // KHR_parallel_shader_compile (WebKit and Chrome have it): compileAsync issues the compile and returns — the driver links
+  // off the main thread; without it a program compiles synchronously, one object at a time inside the frame budget
+  const par = !!(r.extensions && r.extensions.has && r.extensions.has('KHR_parallel_shader_compile'));
+  const pending = [];
+  const comp = (obj, cam, sc) => { if (par) { const p = r.compileAsync(obj, cam, sc); if (p && p.then) pending.push(p.catch(() => null)); } else r.compile(obj, cam, sc); };
   engine.skipRender = (frame) => {
     if (engine.params && engine.params.shot) return false;
     if (drawNow) { drawNow = false; return false; }
@@ -380,6 +415,6 @@ export function compactCanvasTextures(engine, maxPx, { wait = 4000, minArea = 1 
     }, 500);
   }, wait);
 }
-export const profile = { mobile: MOBILE, touch: TOUCH, tier: TIER, crashed: CRASHED ? { stage: prevBoot.stage, t: prevBoot.t, tier: prevBoot.tier } : null, injected };
+export const profile = { mobile: MOBILE, touch: TOUCH, tier: TIER, device: MOBILE ? DEVICE_TIER : null, crashed: CRASHED ? { stage: prevBoot.stage, t: prevBoot.t, tier: prevBoot.tier } : null, injected };
 if (typeof window !== 'undefined') window.__profile = profile;
 export default profile;

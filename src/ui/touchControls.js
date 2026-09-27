@@ -46,7 +46,7 @@ html.is-touch body { position: fixed; inset: 0; }
 #touch-ui [data-btn=interact] small { color: #3a2c10; font-size: 10px; margin: 0; }
 #touch-ui .top { position: absolute; top: calc(8px + var(--st)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: none; }
 #touch-ui .top .btn { position: static; width: auto; height: 36px; padding: 0 14px; border-radius: 18px; flex-direction: row; gap: 6px; font-size: 13px; }
-#touch-ui.riding .fight, #touch-ui.paused .play, #touch-ui.paused .zone, #touch-ui.paused .stick-base,
+#touch-ui.riding .fight:not([data-btn=dodge]), #touch-ui.paused .play, #touch-ui.paused .zone, #touch-ui.paused .stick-base,
 #touch-ui.paused .top .btn:not([data-btn=pause]) { display: none; }
 #touch-ui.paused [data-btn=pause] { background: rgba(217, 180, 90, .9); color: #100d06; }
 #touch-ui.paused [data-btn=pause] small { color: #2a2010; }
@@ -129,7 +129,7 @@ const touch = {
     this.root = root;
     const $ = (s) => root.querySelector(s);
     const btn = (a) => root.querySelector(`[data-btn="${a}"]`);
-    this.ui = { base: $('.stick-base'), knob: $('.stick-knob'), look: $('.zone.look'), move: $('.zone.move'), interact: btn('interact'), heat: btn('heat'), pause: btn('pause'), fs: btn('fullscreen') };
+    this.ui = { base: $('.stick-base'), knob: $('.stick-knob'), look: $('.zone.look'), move: $('.zone.move'), interact: btn('interact'), dodge: btn('dodge'), heat: btn('heat'), pause: btn('pause'), fs: btn('fullscreen') };
 
     // iOS: no pinch zoom / double-tap zoom on the game (the viewport meta asks, Safari ignores it)
     for (const t of ['gesturestart', 'gesturechange']) document.addEventListener(t, (e) => e.preventDefault(), { passive: false });
@@ -273,9 +273,18 @@ const touch = {
     if (ms && ms.talk) label = '次へ ▶';
     else if (sp && sp.style.opacity !== '0') label = (sp.querySelector('.cap') || {}).textContent || '調べる';
     else if (lp && lp.style.opacity !== '0') label = loop && loop.ride ? '返却' : 'LOOPに乗る';
+    if(loop?.ride) {
+      const zone=loop.returnZone(e.player.position.x,e.player.position.z);
+      label=zone && loop.freeSlots(zone)>0?'返却':loop.ride.pushing?'乗る':'降りる';
+    }
+    const D=this.ui.dodge;
+    D.firstChild.textContent=loop?.ride?(loop.ride.pushing?'乗る':'降りる'):'回避';
+    D.querySelector('small').textContent=loop?.ride?'LOOP':'DODGE';
+    D.setAttribute('aria-label',D.firstChild.textContent);
     const I = this.ui.interact;
     I.hidden = !label || paused;
     if (label && I.firstChild.textContent !== label) I.firstChild.textContent = label;
+    if(label) I.setAttribute('aria-label',label);
     const ha = e.get('heatActions');
     this.ui.heat.classList.toggle('ready', !!(ha && ha.prompt && ha.prompt.visible));
   },

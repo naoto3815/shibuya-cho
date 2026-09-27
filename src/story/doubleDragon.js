@@ -70,7 +70,7 @@ export function installDoubleDragon(m, THREE) {
     m.engine.get('enemy').clear();
     m.scene=null;m.talk=null;m.fightCtx=null;m.spawned=false;m._clubEntrancePlaying=false;
     m.startAt=null;m.startScene=null;m.startSubAt=null;m.startSub=null;
-    m.hits=0;m.bestCombo=0;m.fightYen=0;m.kos=0;m.fightT=0;
+    m.hits=0;m.bestCombo=0;m.kos=0;m.fightT=0;
     m.holding=false;m.holdT=0;m.hideSay();m.setStageFocus(null);
     m.engine.get('player').respawn(new THREE.Vector3(-31,0,10.5),2.36);
     m.giveBriefcase();m.setYen(12480,true);
@@ -108,16 +108,17 @@ export function installDoubleDragon(m, THREE) {
     beat(hero,'……手を離せ。'),
     beat('キャッチのホスト','客でもねえくせに、偉そうにすんな！',{stamp:'喧'})
   ];
+  // Legacy scene ID retained for existing preview links; no payment takes place.
   m.SCENES.host_payment=[
-    beat('キャッチのホスト','分かった、払う！ もう勘弁してくれ……。'),
-    beat(hero,'世の中には、自分より強い相手もいる。リスク管理の助言料だ。')
+    beat('キャッチのホスト','分かった！ もう勘弁してくれ……。'),
+    beat(hero,'もう誰かを無理に引き止めるな。分かったな。')
   ];
   m.SCENES.club_intro=[
-    beat('朝比奈未空','……今の、撮れてる。その人から金を取ったよな。',{do:()=>{m.showStoryCast('club');reveal('fightclub_conflict');m.showMsg('撮影中','FIGHT CLUB — REC');}}),
+    beat('朝比奈未空','……今の、撮れてる。もう倒れてる相手に、何をしてる？',{do:()=>{m.showStoryCast('club');reveal('fightclub_conflict');m.showMsg('撮影中','FIGHT CLUB — REC');}}),
     beat('朝比奈快','事情は？ その人、もう抵抗してないだろ。'),
     beat(hero,'カメラを向ける前に、こいつが何をしたか聞け。'),
     beat('那珂川天真','なら、まず落ち着いて話そうよ。'),
-    beat('キャッチのホスト','助けて！ この男、いきなり金を要求して……！'),
+    beat('キャッチのホスト','助けて！ この男、いきなり殴って、まだ脅してくるんだ！'),
     beat('朝比奈未空','逃げるな。話が済むまで、ここにいてもらう。'),
     beat(hero,'腕を離せ。……俺にも、急ぐ理由がある。',{stamp:'喧'})
   ];
@@ -125,14 +126,14 @@ export function installDoubleDragon(m, THREE) {
     beat(junior,'待ってください！ 店の前から見ていました。その人は先に絡まれたんです！',{do:()=>{m.showStoryCast('club',false);remove(m.juniorWitness);m.juniorWitness=actors([center.x+2,center.z+2],[{name:junior,variant:'ped_formal_portrait_4019'}]);m.npcFor(m.juniorWitness);if(m.juniorWitness._pin)m.juniorWitness._pin.group.visible=false;}}),
     beat('朝比奈快','そっちの人にも聞く。最初に手を出したのは、どっちだ？'),
     beat('キャッチのホスト','……俺だよ。客引きを断られて、つい。柊って人のことも、本当に知らねえ。'),
-    beat('那珂川天真','俺たちが見たのは、金を受け取ったところだけだった。早まったね。'),
+    beat('那珂川天真','俺たちが見たのは、倒れた相手に詰め寄るところだけだった。早まったね。'),
     beat('朝比奈未空','決めつけたのは悪かった。この映像は、そのまま出さない。'),
-    beat(hero,'俺も熱くなった。金の取り方も、褒められたものじゃない。'),
+    beat(hero,'俺も熱くなった。事情を話す前に、手を出したのは悪かった。'),
     beat(junior,'僕もハチ公前で助けてもらいました。絡んできたのは、玄凪会の連中で……。'),
     beat('朝比奈快','玄凪会……最近、この辺の半グレを使って勢力を広げてる。俺たちも調べてた。'),
     beat(hero,'柊という男に会いに来た。玄凪会の幹部になっているらしい。センター街の奥の支社へ行く。'),
     beat('朝比奈未空','俺たちも力を貸す。分かったことがあれば、知らせるよ。'),
-    beat('那珂川天真','気をつけて。今度の相談料は、なしでいいから。'),
+    beat('那珂川天真','気をつけて。一人で抱え込まないで、困ったら連絡して。'),
     beat(hero,'……ああ。助かる。',{do:()=>reveal('fightclub_allies')})
   ];
   const guards=[{name:'玄凪会の門番',variant:'enforcer_b',persona:'guard'},{name:'玄凪会の構成員',variant:'enforcer_a',persona:'brute'},{name:'玄凪会の若衆',variant:'wanderer',persona:'coward'}];
@@ -181,7 +182,7 @@ export function installDoubleDragon(m, THREE) {
     const en=m.engine.get('enemy');en.clear();
     const p=m.engine.player;
     m.engine.get('player').respawn(p.position.clone(),p.yaw);
-    m.fightCtx=kind;m.hits=0;m.bestCombo=0;m.fightYen=0;m.kos=0;m.fightT=0;
+    m.fightCtx=kind;m.hits=0;m.bestCombo=0;m.kos=0;m.fightT=0;
     const defs=kind==='host'?[{name:'キャッチのホスト',variant:'nightlife_king',persona:'guard'}]:kind==='branch'?guards:club;
     const list=defs.map((d,i)=>{const a=p.yaw+(i-(defs.length-1)/2)*.55;const at=kind==='branch'?m.branchMark(-1-i*1.3,2.8):p.position.clone().add(new THREE.Vector3(Math.sin(a)*4,0,Math.cos(a)*4));at.y=m.groundAt(at.x,at.z);const e=en.spawn('chinpira',at,{...d,aggro:true,ownClothes:true});en.go(e,'approach');return e;});
     m.setStep(kind==='host'?5:kind==='branch'?9:7);m.engine.state.mode='combat';m.engine.events.emit('combat:start',{enemies:list});

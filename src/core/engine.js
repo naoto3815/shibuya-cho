@@ -34,7 +34,9 @@ export function createEngine({ canvas, seed = 1 } = {}) {
   const DPR = window.devicePixelRatio || 1;
   const resQ = Number(QS.get('res'));
   const fixedRes = QS.has('res') && isFinite(resQ) && resQ > 0;
-  const PR_START = fixedRes ? Math.min(DPR, resQ) : Math.min(DPR, MOBILE ? 1.0 : 1.25);
+  // ?resstart / ?resmin (the phone tiers, mobileProfile.js): where the governed ratio starts and its floor
+  const resStartQ = Number(QS.get('resstart')), resMinQ = Number(QS.get('resmin'));
+  const PR_START = fixedRes ? Math.min(DPR, resQ) : Math.min(DPR, resStartQ > 0 ? resStartQ : MOBILE ? 1.0 : 1.25);
   const resMaxQ = Number(QS.get('resmax'));
   const PR_MAX = fixedRes ? PR_START : Math.min(DPR, 2.0, Math.max(PR_START, isFinite(resMaxQ) && resMaxQ > 0 ? resMaxQ : PR_START));
   renderer.setPixelRatio(PR_MAX);
@@ -126,7 +128,7 @@ export function createEngine({ canvas, seed = 1 } = {}) {
   const gov = {
     auto: QS.get('gov') !== '0',
     prAuto: !fixedRes,
-    pr: PR_START, start: PR_START, min: Math.min(DPR, MOBILE ? 0.75 : 1.0), max: PR_MAX, step: 0.125,
+    pr: PR_START, start: PR_START, min: Math.min(PR_START, DPR, resMinQ > 0 ? resMinQ : MOBILE ? 0.75 : 1.0), max: PR_MAX, step: 0.125,
     mirrorEvery: 1, pfxQ: 2,
     target: 1 / 60, ema: 0, slow: 0, fast: 0, steady: 0, cool: 0,
     stack: [], pending: null, block: {}, tries: {}, upBlock: 0, upBackoff: 10, lastUp: -1e9,
