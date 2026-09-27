@@ -1,0 +1,795 @@
+{
+ "file": "foley.wav",
+ "sampleRate": 44100,
+ "generator": "src/audio/bake.mjs",
+ "regions": {
+  "impact_light_1": {
+   "start": 0.05,
+   "dur": 0.250227,
+   "st": -13.15,
+   "pk": -1,
+   "peakAt": 0.0011,
+   "onset": 0
+  },
+  "impact_light_2": {
+   "start": 0.350227,
+   "dur": 0.270703,
+   "st": -13.43,
+   "pk": -1,
+   "peakAt": 0.0029,
+   "onset": 0
+  },
+  "impact_light_3": {
+   "start": 0.67093,
+   "dur": 0.316712,
+   "st": -12.92,
+   "pk": -1,
+   "peakAt": 0.0028,
+   "onset": 0
+  },
+  "impact_light_4": {
+   "start": 1.037642,
+   "dur": 0.273401,
+   "st": -12.89,
+   "pk": -1,
+   "peakAt": 0.0031,
+   "onset": 0
+  },
+  "impact_light_5": {
+   "start": 1.361043,
+   "dur": 0.265102,
+   "st": -13.47,
+   "pk": -1,
+   "peakAt": 0.0009,
+   "onset": 0
+  },
+  "impact_light_6": {
+   "start": 1.676145,
+   "dur": 0.26585,
+   "st": -13.02,
+   "pk": -1.09,
+   "peakAt": 0.0031,
+   "onset": 0
+  },
+  "impact_heavy_1": {
+   "start": 1.991995,
+   "dur": 0.429093,
+   "st": -9.18,
+   "pk": -1,
+   "peakAt": 0.0011,
+   "onset": 0
+  },
+  "impact_heavy_2": {
+   "start": 2.471088,
+   "dur": 0.429546,
+   "st": -9.61,
+   "pk": -1,
+   "peakAt": 0.0029,
+   "onset": 0
+  },
+  "impact_heavy_3": {
+   "start": 2.950635,
+   "dur": 0.437302,
+   "st": -9.28,
+   "pk": -1,
+   "peakAt": 0.0013,
+   "onset": 0
+  },
+  "impact_heavy_4": {
+   "start": 3.437937,
+   "dur": 0.431474,
+   "st": -9.17,
+   "pk": -1,
+   "peakAt": 0.0016,
+   "onset": 0
+  },
+  "impact_heavy_5": {
+   "start": 3.91941,
+   "dur": 0.427324,
+   "st": -9.62,
+   "pk": -1,
+   "peakAt": 0.0007,
+   "onset": 0
+  },
+  "impact_heavy_6": {
+   "start": 4.396735,
+   "dur": 0.437392,
+   "st": -9.44,
+   "pk": -1,
+   "peakAt": 0.0015,
+   "onset": 0
+  },
+  "impact_finisher_1": {
+   "start": 4.884127,
+   "dur": 0.699138,
+   "st": -6.8,
+   "pk": -1,
+   "peakAt": 0.0018,
+   "onset": 0
+  },
+  "impact_finisher_2": {
+   "start": 5.633265,
+   "dur": 0.694694,
+   "st": -7.14,
+   "pk": -1.09,
+   "peakAt": 0.0006,
+   "onset": 0
+  },
+  "impact_finisher_3": {
+   "start": 6.377959,
+   "dur": 0.698957,
+   "st": -6.88,
+   "pk": -1,
+   "peakAt": 0.002,
+   "onset": 0
+  },
+  "impact_finisher_4": {
+   "start": 7.126916,
+   "dur": 0.69771,
+   "st": -6.62,
+   "pk": -1,
+   "peakAt": 0.0001,
+   "onset": 0
+  },
+  "impact_finisher_5": {
+   "start": 7.874626,
+   "dur": 0.698685,
+   "st": -6.9,
+   "pk": -1,
+   "peakAt": 0.0001,
+   "onset": 0
+  },
+  "impact_finisher_6": {
+   "start": 8.623311,
+   "dur": 0.698571,
+   "st": -6.73,
+   "pk": -1,
+   "peakAt": 0,
+   "onset": 0
+  },
+  "block_1": {
+   "start": 9.371882,
+   "dur": 0.26932,
+   "st": -11.36,
+   "pk": -1.03,
+   "peakAt": 0.0102,
+   "onset": 0.0007
+  },
+  "block_2": {
+   "start": 9.691202,
+   "dur": 0.30263,
+   "st": -11.59,
+   "pk": -1,
+   "peakAt": 0.0032,
+   "onset": 0.0007
+  },
+  "block_3": {
+   "start": 10.043832,
+   "dur": 0.274898,
+   "st": -10.82,
+   "pk": -1.05,
+   "peakAt": 0.0022,
+   "onset": 0.0005
+  },
+  "block_4": {
+   "start": 10.36873,
+   "dur": 0.293878,
+   "st": -10.81,
+   "pk": -1.04,
+   "peakAt": 0.0106,
+   "onset": 0.0007
+  },
+  "guardbreak_1": {
+   "start": 10.712608,
+   "dur": 0.366395,
+   "st": -11.63,
+   "pk": -1.09,
+   "peakAt": 0.0017,
+   "onset": 0.0001
+  },
+  "guardbreak_2": {
+   "start": 11.129002,
+   "dur": 0.363923,
+   "st": -11.58,
+   "pk": -1.09,
+   "peakAt": 0.0029,
+   "onset": 0.0001
+  },
+  "guardbreak_3": {
+   "start": 11.542925,
+   "dur": 0.386485,
+   "st": -11.54,
+   "pk": -1,
+   "peakAt": 0.0014,
+   "onset": 0
+  },
+  "guardbreak_4": {
+   "start": 11.97941,
+   "dur": 0.373039,
+   "st": -12,
+   "pk": -1.09,
+   "peakAt": 0.002,
+   "onset": 0
+  },
+  "bodyfall_1": {
+   "start": 12.402449,
+   "dur": 0.585873,
+   "st": -9.44,
+   "pk": -1.09,
+   "peakAt": 0.0033,
+   "onset": 0.0006
+  },
+  "bodyfall_2": {
+   "start": 13.038322,
+   "dur": 0.706893,
+   "st": -8.86,
+   "pk": -1,
+   "peakAt": 0.003,
+   "onset": 0.0006
+  },
+  "bodyfall_3": {
+   "start": 13.795215,
+   "dur": 0.716757,
+   "st": -8.76,
+   "pk": -1,
+   "peakAt": 0.0355,
+   "onset": 0.0006
+  },
+  "bodyfall_4": {
+   "start": 14.561973,
+   "dur": 0.608073,
+   "st": -9.12,
+   "pk": -1,
+   "peakAt": 0.0554,
+   "onset": 0.0006
+  },
+  "splash_1": {
+   "start": 15.220045,
+   "dur": 0.471542,
+   "st": -12.87,
+   "pk": -1,
+   "peakAt": 0.0073,
+   "onset": 0.0002
+  },
+  "splash_2": {
+   "start": 15.741587,
+   "dur": 0.496961,
+   "st": -12.54,
+   "pk": -1.09,
+   "peakAt": 0.0839,
+   "onset": 0.0003
+  },
+  "splash_3": {
+   "start": 16.288549,
+   "dur": 0.538458,
+   "st": -12.57,
+   "pk": -1.09,
+   "peakAt": 0.0055,
+   "onset": 0
+  },
+  "splash_4": {
+   "start": 16.877007,
+   "dur": 0.485896,
+   "st": -12.46,
+   "pk": -1.08,
+   "peakAt": 0.0207,
+   "onset": 0.0003
+  },
+  "cloth_1": {
+   "start": 17.412902,
+   "dur": 0.460136,
+   "st": -15.12,
+   "pk": -1,
+   "peakAt": 0.218,
+   "onset": 0.0053
+  },
+  "cloth_2": {
+   "start": 17.923039,
+   "dur": 0.324059,
+   "st": -15.12,
+   "pk": -1,
+   "peakAt": 0.0348,
+   "onset": 0.0093
+  },
+  "cloth_3": {
+   "start": 18.297098,
+   "dur": 0.464717,
+   "st": -15.14,
+   "pk": -1,
+   "peakAt": 0.0532,
+   "onset": 0.0098
+  },
+  "cloth_4": {
+   "start": 18.811814,
+   "dur": 0.315782,
+   "st": -15.14,
+   "pk": -1,
+   "peakAt": 0.0518,
+   "onset": 0.0106
+  },
+  "whoosh_light_1": {
+   "start": 19.177596,
+   "dur": 0.268594,
+   "st": -14.42,
+   "pk": -1.09,
+   "peakAt": 0.2022,
+   "onset": 0.094,
+   "peak": 0.2022
+  },
+  "whoosh_light_2": {
+   "start": 19.49619,
+   "dur": 0.270363,
+   "st": -15.31,
+   "pk": -1,
+   "peakAt": 0.1839,
+   "onset": 0.0917,
+   "peak": 0.1839
+  },
+  "whoosh_light_3": {
+   "start": 19.816553,
+   "dur": 0.255147,
+   "st": -15.83,
+   "pk": -1.09,
+   "peakAt": 0.1872,
+   "onset": 0.0897,
+   "peak": 0.1872
+  },
+  "whoosh_light_4": {
+   "start": 20.121701,
+   "dur": 0.258005,
+   "st": -15.7,
+   "pk": -1.09,
+   "peakAt": 0.1638,
+   "onset": 0.0904,
+   "peak": 0.1638
+  },
+  "whoosh_heavy_1": {
+   "start": 20.429705,
+   "dur": 0.423039,
+   "st": -13.64,
+   "pk": -1,
+   "peakAt": 0.2959,
+   "onset": 0.139,
+   "peak": 0.2959
+  },
+  "whoosh_heavy_2": {
+   "start": 20.902744,
+   "dur": 0.409206,
+   "st": -13.26,
+   "pk": -1,
+   "peakAt": 0.3033,
+   "onset": 0.1493,
+   "peak": 0.3033
+  },
+  "whoosh_heavy_3": {
+   "start": 21.36195,
+   "dur": 0.426122,
+   "st": -14.27,
+   "pk": -1,
+   "peakAt": 0.3038,
+   "onset": 0.1445,
+   "peak": 0.3038
+  },
+  "whoosh_heavy_4": {
+   "start": 21.838073,
+   "dur": 0.441474,
+   "st": -13.93,
+   "pk": -1,
+   "peakAt": 0.2985,
+   "onset": 0.1549,
+   "peak": 0.2985
+  },
+  "step_asphalt_dry_1": {
+   "start": 22.329546,
+   "dur": 0.294853,
+   "st": -14.08,
+   "pk": -1,
+   "peakAt": 0.0036,
+   "onset": 0.0004
+  },
+  "step_asphalt_dry_2": {
+   "start": 22.674399,
+   "dur": 0.274785,
+   "st": -13.48,
+   "pk": -1.09,
+   "peakAt": 0.0014,
+   "onset": 0.0004
+  },
+  "step_asphalt_dry_3": {
+   "start": 22.999184,
+   "dur": 0.290204,
+   "st": -13.17,
+   "pk": -1,
+   "peakAt": 0.0017,
+   "onset": 0.0003
+  },
+  "step_asphalt_dry_4": {
+   "start": 23.339388,
+   "dur": 0.29068,
+   "st": -12.82,
+   "pk": -1.09,
+   "peakAt": 0.0016,
+   "onset": 0.0004
+  },
+  "step_asphalt_wet_1": {
+   "start": 23.680068,
+   "dur": 0.285079,
+   "st": -13.74,
+   "pk": -1,
+   "peakAt": 0.0054,
+   "onset": 0.0004
+  },
+  "step_asphalt_wet_2": {
+   "start": 24.015147,
+   "dur": 0.289615,
+   "st": -13.32,
+   "pk": -1,
+   "peakAt": 0.005,
+   "onset": 0.0005
+  },
+  "step_asphalt_wet_3": {
+   "start": 24.354762,
+   "dur": 0.319909,
+   "st": -13.53,
+   "pk": -1,
+   "peakAt": 0.0013,
+   "onset": 0.0005
+  },
+  "step_asphalt_wet_4": {
+   "start": 24.724671,
+   "dur": 0.297642,
+   "st": -13.38,
+   "pk": -1,
+   "peakAt": 0.0066,
+   "onset": 0.0005
+  },
+  "step_concrete_dry_1": {
+   "start": 25.072313,
+   "dur": 0.285215,
+   "st": -13.56,
+   "pk": -1,
+   "peakAt": 0.0018,
+   "onset": 0.0002
+  },
+  "step_concrete_dry_2": {
+   "start": 25.407528,
+   "dur": 0.278413,
+   "st": -13.7,
+   "pk": -1.02,
+   "peakAt": 0.0049,
+   "onset": 0.0003
+  },
+  "step_concrete_dry_3": {
+   "start": 25.735941,
+   "dur": 0.270499,
+   "st": -13.35,
+   "pk": -1,
+   "peakAt": 0.002,
+   "onset": 0.0003
+  },
+  "step_concrete_dry_4": {
+   "start": 26.05644,
+   "dur": 0.270839,
+   "st": -13.51,
+   "pk": -1,
+   "peakAt": 0.0042,
+   "onset": 0.0002
+  },
+  "step_concrete_wet_1": {
+   "start": 26.377279,
+   "dur": 0.290975,
+   "st": -13.59,
+   "pk": -1.09,
+   "peakAt": 0.0048,
+   "onset": 0.0004
+  },
+  "step_concrete_wet_2": {
+   "start": 26.718254,
+   "dur": 0.283356,
+   "st": -13.56,
+   "pk": -1,
+   "peakAt": 0.0089,
+   "onset": 0.0003
+  },
+  "step_concrete_wet_3": {
+   "start": 27.05161,
+   "dur": 0.262925,
+   "st": -13.8,
+   "pk": -1,
+   "peakAt": 0.0095,
+   "onset": 0.0004
+  },
+  "step_concrete_wet_4": {
+   "start": 27.364535,
+   "dur": 0.288458,
+   "st": -13.39,
+   "pk": -1,
+   "peakAt": 0.0046,
+   "onset": 0.0003
+  },
+  "step_tile_dry_1": {
+   "start": 27.702993,
+   "dur": 0.264649,
+   "st": -13.61,
+   "pk": -1,
+   "peakAt": 0.0016,
+   "onset": 0.0003
+  },
+  "step_tile_dry_2": {
+   "start": 28.017642,
+   "dur": 0.263039,
+   "st": -13.59,
+   "pk": -1,
+   "peakAt": 0.0012,
+   "onset": 0.0002
+  },
+  "step_tile_dry_3": {
+   "start": 28.33068,
+   "dur": 0.268073,
+   "st": -12.74,
+   "pk": -1.01,
+   "peakAt": 0.0049,
+   "onset": 0.0002
+  },
+  "step_tile_dry_4": {
+   "start": 28.648753,
+   "dur": 0.264558,
+   "st": -12.74,
+   "pk": -1.01,
+   "peakAt": 0.0018,
+   "onset": 0.0002
+  },
+  "step_tile_wet_1": {
+   "start": 28.963311,
+   "dur": 0.282744,
+   "st": -13.36,
+   "pk": -1.09,
+   "peakAt": 0.0082,
+   "onset": 0.0003
+  },
+  "step_tile_wet_2": {
+   "start": 29.296054,
+   "dur": 0.288277,
+   "st": -13.19,
+   "pk": -1.05,
+   "peakAt": 0.0012,
+   "onset": 0.0003
+  },
+  "step_tile_wet_3": {
+   "start": 29.634331,
+   "dur": 0.258821,
+   "st": -13.29,
+   "pk": -1.09,
+   "peakAt": 0.0045,
+   "onset": 0.0004
+  },
+  "step_tile_wet_4": {
+   "start": 29.943152,
+   "dur": 0.274535,
+   "st": -13.29,
+   "pk": -1,
+   "peakAt": 0.0046,
+   "onset": 0.0003
+  },
+  "crash_1": {
+   "start": 30.267687,
+   "dur": 2.194286,
+   "st": -16.76,
+   "pk": -1,
+   "peakAt": 0.0001,
+   "onset": 0
+  },
+  "rcym_1": {
+   "start": 32.511973,
+   "dur": 0.62,
+   "st": -19.29,
+   "pk": -7.22,
+   "peakAt": 0.5884,
+   "onset": 0.1607,
+   "peak": 0.62
+  },
+  "crash_2": {
+   "start": 33.181973,
+   "dur": 2.195034,
+   "st": -16.91,
+   "pk": -1.09,
+   "peakAt": 0.0001,
+   "onset": 0
+  },
+  "rcym_2": {
+   "start": 35.427007,
+   "dur": 0.62,
+   "st": -18.67,
+   "pk": -5.19,
+   "peakAt": 0.5831,
+   "onset": 0.1741,
+   "peak": 0.62
+  },
+  "crash_3": {
+   "start": 36.097007,
+   "dur": 2.192018,
+   "st": -16.91,
+   "pk": -1.09,
+   "peakAt": 0.0003,
+   "onset": 0
+  },
+  "rcym_3": {
+   "start": 38.339025,
+   "dur": 0.62,
+   "st": -18.27,
+   "pk": -5.62,
+   "peakAt": 0.5851,
+   "onset": 0.1664,
+   "peak": 0.62
+  },
+  "crash_4": {
+   "start": 39.009025,
+   "dur": 2.191088,
+   "st": -16.91,
+   "pk": -1.09,
+   "peakAt": 0.0012,
+   "onset": 0
+  },
+  "rcym_4": {
+   "start": 41.250113,
+   "dur": 0.62,
+   "st": -18.63,
+   "pk": -6.98,
+   "peakAt": 0.5826,
+   "onset": 0.1691,
+   "peak": 0.62
+  },
+  "taiko_odaiko_1": {
+   "start": 41.920113,
+   "dur": 2.020952,
+   "st": -11.8,
+   "pk": -1,
+   "peakAt": 0.0012,
+   "onset": 0.0002
+  },
+  "taiko_odaiko_2": {
+   "start": 43.991066,
+   "dur": 2.06127,
+   "st": -12.01,
+   "pk": -1,
+   "peakAt": 0.0014,
+   "onset": 0.0002
+  },
+  "taiko_odaiko_3": {
+   "start": 46.102336,
+   "dur": 1.87424,
+   "st": -11.59,
+   "pk": -1,
+   "peakAt": 0.0015,
+   "onset": 0.0003
+  },
+  "taiko_odaiko_4": {
+   "start": 48.026576,
+   "dur": 1.942902,
+   "st": -11.71,
+   "pk": -1,
+   "peakAt": 0.001,
+   "onset": 0.0003
+  },
+  "taiko_shime_1": {
+   "start": 50.019478,
+   "dur": 1.133515,
+   "st": -10.78,
+   "pk": -1,
+   "peakAt": 0.0091,
+   "onset": 0.0001
+  },
+  "taiko_shime_2": {
+   "start": 51.202993,
+   "dur": 0.992018,
+   "st": -11.68,
+   "pk": -1,
+   "peakAt": 0.002,
+   "onset": 0.0001
+  },
+  "taiko_shime_3": {
+   "start": 52.245011,
+   "dur": 1.319184,
+   "st": -11.66,
+   "pk": -1.09,
+   "peakAt": 0.0039,
+   "onset": 0.0002
+  },
+  "taiko_shime_4": {
+   "start": 53.614195,
+   "dur": 0.992562,
+   "st": -11.89,
+   "pk": -1,
+   "peakAt": 0.0007,
+   "onset": 0.0001
+  },
+  "stamp_1": {
+   "start": 54.656757,
+   "dur": 0.75102,
+   "st": -10.72,
+   "pk": -1,
+   "peakAt": 0.0033,
+   "onset": 0
+  },
+  "stamp_2": {
+   "start": 55.457778,
+   "dur": 0.624603,
+   "st": -10.94,
+   "pk": -1,
+   "peakAt": 0.0038,
+   "onset": 0
+  },
+  "stamp_3": {
+   "start": 56.132381,
+   "dur": 0.645533,
+   "st": -10.89,
+   "pk": -1,
+   "peakAt": 0.0064,
+   "onset": 0
+  },
+  "stamp_4": {
+   "start": 56.827914,
+   "dur": 0.59805,
+   "st": -11.02,
+   "pk": -1,
+   "peakAt": 0.0046,
+   "onset": 0
+  },
+  "crowd_oh_1": {
+   "start": 57.475964,
+   "dur": 1.461406,
+   "st": -10.42,
+   "pk": -1.09,
+   "peakAt": 0.5369,
+   "onset": 0.0339
+  },
+  "crowd_oh_2": {
+   "start": 58.98737,
+   "dur": 1.507007,
+   "st": -10.47,
+   "pk": -1,
+   "peakAt": 0.2836,
+   "onset": 0.0254
+  },
+  "crowd_oh_3": {
+   "start": 60.544376,
+   "dur": 1.581293,
+   "st": -10.98,
+   "pk": -1,
+   "peakAt": 0.292,
+   "onset": 0.0314
+  },
+  "crowd_react_1": {
+   "start": 62.175669,
+   "dur": 1.268662,
+   "st": -11.5,
+   "pk": -1.06,
+   "peakAt": 0.1628,
+   "onset": 0.0119
+  },
+  "crowd_react_2": {
+   "start": 63.494331,
+   "dur": 1.243696,
+   "st": -11.68,
+   "pk": -1.09,
+   "peakAt": 0.4727,
+   "onset": 0.0132
+  },
+  "crowd_react_3": {
+   "start": 64.788027,
+   "dur": 1.253197,
+   "st": -10.56,
+   "pk": -1.09,
+   "peakAt": 0.1766,
+   "onset": 0.0134
+  },
+  "crowd_react_4": {
+   "start": 66.091224,
+   "dur": 1.233968,
+   "st": -11.91,
+   "pk": -1,
+   "peakAt": 0.1729,
+   "onset": 0.0088
+  }
+ }
+}

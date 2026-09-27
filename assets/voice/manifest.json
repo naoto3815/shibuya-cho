@@ -1,0 +1,307 @@
+{
+  "engine": "VOICEVOX (TTS Quest v3 hosted API)",
+  "credit": "VOICEVOX:青山龍星 / VOICEVOX:玄野武宏(CV:ガロ)",
+  "note": "Generated once and self-hosted. The API is never called at runtime. See docs/CREDITS.md.",
+  "speakers": {
+    "hero": {
+      "id": 13,
+      "name": "VOICEVOX:青山龍星（ノーマル）",
+      "character": "渋沢 健人",
+      "credit": "VOICEVOX:青山龍星",
+      "note": "Combat barks. Hold lifted 2026-09-25 when the client asked for the hero voiced; see docs/CREDITS.md for the VirVox application condition."
+    },
+    "enemy": {
+      "id": 40,
+      "name": "VOICEVOX:玄野武宏（ツンギレ）",
+      "character": "チンピラ",
+      "credit": "VOICEVOX:玄野武宏(CV:ガロ)"
+    },
+    "heroDialogue": {
+      "ids": [
+        84,
+        82
+      ],
+      "name": "VOICEVOX:青山龍星（しっとり / 不機嫌）",
+      "character": "渋沢 健人",
+      "credit": "VOICEVOX:青山龍星",
+      "note": "Spoken dialogue (missions say()). しっとり for the level lines, 不機嫌 for the four hard ones. Played at 0.955x through a chest / de-sparkle chain (audio.js HERO_DLG) for a lower, more restrained delivery.",
+      "gemini": {
+        "model": "gemini-2.5-flash-preview-tts",
+        "voice": "Algenib",
+        "credit": "Voice: Google Gemini TTS (AI-generated)"
+      },
+      "note2": "Gemini TTS takes (voice Algenib, 試作B) are recorded in `gm` per line; heroVoice.mjs switches `file` to them only once all 24 exist, so the game never mixes two voices."
+    }
+  },
+  "enemyVoices": {
+    "note": "audio.js gives each enemy in a fight its own voice. e0 is speaker 40 as generated; e1 / e2 are the same takes processed at playback (e1: -2.2 st, chest lift, top rolled off; e2: +1.8 st, nasal band, grit) until lines with \"speaker\": \"e1\" / \"e2\" are added here, which are then used raw.",
+    "e0": "不良 / チンピラ",
+    "e1": "ヤクザ組員 / 組員 / 若衆",
+    "e2": "半グレ"
+  },
+  "lines": [
+    {
+      "file": "hero_attack_1.mp3",
+      "text": "おらぁ",
+      "tags": [
+        "hero_attack",
+        "hero"
+      ],
+      "rate": 0.97
+    },
+    {
+      "file": "hero_attack_2.mp3",
+      "text": "せいっ",
+      "tags": [
+        "hero_attack",
+        "hero"
+      ],
+      "rate": 0.97
+    },
+    {
+      "file": "hero_heavy_1.mp3",
+      "text": "行くぞ",
+      "tags": [
+        "hero_encounter",
+        "hero"
+      ],
+      "rate": 0.95
+    },
+    {
+      "file": "hero_heavy_2.mp3",
+      "text": "まだまだだ",
+      "tags": [
+        "hero_getup",
+        "hero"
+      ],
+      "rate": 0.95
+    },
+    {
+      "file": "hero_hurt_1.mp3",
+      "text": "ぐっ",
+      "tags": [
+        "hero_hurt",
+        "hero"
+      ],
+      "rate": 0.96
+    },
+    {
+      "file": "hero_ko_1.mp3",
+      "text": "終わりだ",
+      "tags": [
+        "hero_ko",
+        "hero"
+      ],
+      "rate": 0.94
+    },
+    {
+      "file": "hero_heat_1.mp3",
+      "text": "覚悟しろ",
+      "tags": [
+        "hero_heat",
+        "hero"
+      ],
+      "rate": 0.93
+    },
+    {
+      "file": "enemy_attack_1.mp3",
+      "text": "てめえ！",
+      "tags": [
+        "enemy_attack",
+        "enemy"
+      ],
+      "rate": 1.04
+    },
+    {
+      "file": "enemy_attack_2.mp3",
+      "text": "ざけんな！",
+      "tags": [
+        "enemy_attack",
+        "enemy"
+      ],
+      "rate": 1.04
+    },
+    {
+      "file": "enemy_attack_3.mp3",
+      "text": "くらえ！",
+      "tags": [
+        "enemy_attack",
+        "enemy"
+      ],
+      "rate": 1.06
+    },
+    {
+      "file": "enemy_heavy_1.mp3",
+      "text": "ぶっ潰す！",
+      "tags": [
+        "enemy_attack_heavy",
+        "enemy"
+      ],
+      "rate": 1.02
+    },
+    {
+      "file": "enemy_hurt_1.mp3",
+      "text": "ぐあっ",
+      "tags": [
+        "enemy_hurt",
+        "enemy"
+      ],
+      "rate": 1.05
+    },
+    {
+      "file": "enemy_hurt_2.mp3",
+      "text": "いてえ！",
+      "tags": [
+        "enemy_hurt",
+        "enemy"
+      ],
+      "rate": 1.05
+    },
+    {
+      "file": "enemy_ko_1.mp3",
+      "text": "ちくしょう……",
+      "tags": [
+        "enemy_ko",
+        "enemy"
+      ],
+      "rate": 0.99
+    }
+  ],
+  "dialogue": [
+    {
+      "file": "hero_dlg_01.mp3",
+      "text": "……ああ",
+      "speakerId": 84,
+      "vvFile": "hero_dlg_01.mp3",
+      "engine": "gemini:gemini-2.5-flash-preview-tts:Algenib",
+      "gm": "hero_gm_01.m4a"
+    },
+    {
+      "file": "hero_dlg_02.mp3",
+      "text": "……この字は、あいつか",
+      "speakerId": 84,
+      "vvFile": "hero_dlg_02.mp3",
+      "engine": "gemini:gemini-2.5-flash-preview-tts:Algenib",
+      "gm": "hero_gm_02.m4a"
+    },
+    {
+      "file": "hero_dlg_03.mp3",
+      "text": "……そうか",
+      "speakerId": 84,
+      "vvFile": "hero_dlg_03.mp3",
+      "engine": "gemini:gemini-2.5-flash-preview-tts:Algenib",
+      "gm": "hero_gm_03.m4a"
+    },
+    {
+      "file": "hero_dlg_04.mp3",
+      "text": "……その手を離せ",
+      "speakerId": 82,
+      "vvFile": "hero_dlg_04.mp3",
+      "engine": "gemini:gemini-2.5-flash-preview-tts:Algenib",
+      "gm": "hero_gm_04.m4a"
+    },
+    {
+      "file": "hero_dlg_05.mp3",
+      "text": "……のんべい横丁か",
+      "speakerId": 84,
+      "vvFile": "hero_dlg_05.mp3",
+      "engine": "gemini:gemini-2.5-flash-preview-tts:Algenib",
+      "gm": "hero_gm_05.m4a"
+    },
+    {
+      "file": "hero_dlg_06.mp3",
+      "text": "……佐伯",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_07.mp3",
+      "text": "……帰るか。明日も会社だ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_08.mp3",
+      "text": "……渋谷町か。変わっちまったな",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_09.mp3",
+      "text": "……道を教えただけだ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_10.mp3",
+      "text": "あの店には二度と行くな。行くなら、俺に言え",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_11.mp3",
+      "text": "いらん",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_12.mp3",
+      "text": "もう一度だけ言う。帰れ",
+      "speakerId": 82
+    },
+    {
+      "file": "hero_dlg_13.mp3",
+      "text": "スーツが台無しだ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_14.mp3",
+      "text": "二十二時。残業を片付けて、帰るだけの夜だった",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_15.mp3",
+      "text": "交番の前で、いい度胸だ",
+      "speakerId": 82
+    },
+    {
+      "file": "hero_dlg_16.mp3",
+      "text": "人違いだ。通してくれ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_17.mp3",
+      "text": "十年だ。いい加減、忘れちまえ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_18.mp3",
+      "text": "帰り道だ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_19.mp3",
+      "text": "店名、住所、代表者名。全部書け",
+      "speakerId": 82
+    },
+    {
+      "file": "hero_dlg_20.mp3",
+      "text": "急いでる",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_21.mp3",
+      "text": "柊。お前は何を始めた",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_22.mp3",
+      "text": "残業だ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_23.mp3",
+      "text": "線路沿いを北へ歩け。赤い提灯が見えたらそこだ",
+      "speakerId": 84
+    },
+    {
+      "file": "hero_dlg_24.mp3",
+      "text": "領収書をもらおうか。会社に回す",
+      "speakerId": 84
+    }
+  ]
+}

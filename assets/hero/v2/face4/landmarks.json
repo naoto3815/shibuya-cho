@@ -1,0 +1,23 @@
+{
+  "_doc": "Facial landmarks, pixel coords (x right, y down), read by eye off zoomed crops (marks.py overlays). R/L = HIS right/left. exo/endo = outer/inner eye corner, bo/bi = brow outer/inner end, al = alar wing, m = mouth corner, st = lip line mid, sn = subnasale, nas = nasion, ls = upper lip, pog = chin front, chin = menton, trg = tragus, tri = hairline mid.",
+  "ref_closeup": {"image": "docs/ref/kento-approved-concept.png", "iod_pts": [["Rexo", "Rendo"], ["Lendo", "Lexo"]],
+    "pts": {"Rexo": [979, 335], "Rendo": [1055, 346.5], "Lendo": [1135, 355], "Lexo": [1224, 362.5],
+            "Rbo": [957.5, 290], "Rbi": [1067.5, 305], "Lbi": [1117.5, 310], "Lbo": [1237.5, 320],
+            "tip": [1082.5, 425], "sn": [1090, 459], "Ral": [1035, 449], "Lal": [1128, 457.5],
+            "Rm": [1015, 521.5], "Lm": [1150, 525], "st": [1072.5, 522.5], "chin": [1080, 655]}},
+  "ref_front": {"image": "docs/ref/kento-approved-turnaround.png", "iod_pts": [["Rexo", "Rendo"], ["Lendo", "Lexo"]],
+    "pts": {"Rexo": [254.6, 86.4], "Rendo": [270, 88.1], "Lendo": [288.1, 88.1], "Lexo": [305, 86.1],
+            "Rbo": [250.7, 77.9], "Rbi": [271.4, 76.9], "Lbi": [286, 77.4], "Lbo": [309.3, 76.9],
+            "Ral": [270.7, 110], "Lal": [288.1, 110],
+            "Rm": [266, 125.4], "Lm": [292.9, 125.4], "st": [279.4, 125.3], "chin": [279, 150]},
+    "contour": {"mouth_row_y": 125.7, "mouth_row_x": [246.1, 314.4]}},
+  "ref_profile": {"image": "docs/ref/kento-approved-turnaround.png", "iod_from": "ref_front",
+    "pts": {"tip": [642.6, 106.4], "sn": [649.3, 113.1], "nas": [651.4, 87.9], "Lexo": [670.7, 88.9], "Lbo": [675, 81.4],
+            "Lal": [658.3, 109], "ls": [647.9, 121.4], "st": [649.6, 126.4], "Lm": [657.1, 126.4], "pog": [649.3, 142.9],
+            "chin": [655, 151.4], "trg": [712, 102.5], "tri": [661.4, 54.3]}},
+  "glb_front": {"render": "views.mark_front", "pts": {"Rexo": [250, 427], "Rendo": [360, 432], "Lendo": [535, 430], "Lexo": [640, 422],
+            "Rbo": [220, 362], "Rbi": [395, 355], "Lbi": [500, 355], "Lbo": [680, 360], "Ral": [365, 590], "Lal": [535, 590],
+            "Rm": [310, 712], "Lm": [580, 715], "st": [448, 715]}},
+  "glb_profile": {"render": "views.mark_profile", "pts": {"tip": [192, 580], "sn": [242, 608], "nas": [263, 395], "ls": [225, 680],
+            "pog": [247, 830], "chin": [300, 895], "trg": [655, 570], "tri": [333, 135]}}
+}

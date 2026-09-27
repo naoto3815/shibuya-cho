@@ -1,0 +1,15 @@
+# Cloudflare Pages / Netlify (GitHub Pages ignores this file and serves everything with max-age=600)
+/shibuya-cho/
+  Cache-Control: no-cache
+/shibuya-cho/index.html
+  Cache-Control: no-cache
+/shibuya-cho/manifest.webmanifest
+  Cache-Control: no-cache
+# code is not content-hashed: revalidate on every load (a 304 is cheap)
+/shibuya-cho/src/*
+  Cache-Control: no-cache
+# art, audio, video: long-lived. A changed asset must be re-uploaded under a new name (or purge the CDN cache)
+/shibuya-cho/assets/*
+  Cache-Control: public, max-age=2592000
+/shibuya-cho/node_modules/*
+  Cache-Control: public, max-age=31536000, immutable

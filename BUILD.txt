@@ -1,0 +1,31 @@
+dist: dist  base: /shibuya-cho/  files: 368  total: 164.15 MB
+by directory:
+    46.42 MB  assets/mobs
+    40.52 MB  assets/peds
+    20.82 MB  assets/hero
+    13.47 MB  assets/opening
+    12.29 MB  assets/sfx
+     6.88 MB  assets/story
+     6.08 MB  assets/menu
+     5.20 MB  review
+     4.22 MB  src
+     3.91 MB  assets/hiiragi
+     2.56 MB  node_modules
+     1.27 MB  assets/voice
+     0.35 MB  assets/portraits
+     0.15 MB  assets/app
+     0.00 MB  index.html
+     0.00 MB  manifest.webmanifest
+largest files:
+     6.93 MB  assets/opening/yamanote-shibuya.mp4
+     5.67 MB  assets/sfx/foley.wav
+     5.19 MB  review/city-arrival-v3.mp4
+     4.68 MB  assets/story/fightclub-entrance.mp4
+     4.00 MB  assets/hero/v2/face4/hero_v2.bin
+     3.56 MB  assets/hero/hero_normal.png
+     3.31 MB  assets/opening/shinkansen-fuji.mp4
+     3.22 MB  assets/opening/shinagawa-arrival.mp4
+     2.89 MB  assets/mobs/nightlife_king_albedo.jpg
+     2.82 MB  assets/hero/hero.bin
+limits: largest 6.93 MB — GitHub 100 MB/file (warn 50 MB), Cloudflare Pages 25 MiB/file; GitHub Pages site 1 GB
+not referenced by the code (left out): assets/menu/double-dragon-logo-v1.png, assets/menu/kento.png, assets/opening/train-fuji.png, assets/story/fightclub-entrance-cut.mp4

@@ -1,0 +1,117 @@
+{
+ "generator": "src/audio/bake.mjs music",
+ "bpm": 128,
+ "bar": 1.875,
+ "sampleRate": 44100,
+ "preroll": 0.25,
+ "onsetRef": 0.000249,
+ "main": {
+  "at": 0.25,
+  "bars": 32,
+  "loopBar": 4
+ },
+ "last": {
+  "at": 60.75,
+  "bars": 8,
+  "loopBar": 0
+ },
+ "sections": [
+  {
+   "name": "intro",
+   "from": 0,
+   "to": 4
+  },
+  {
+   "name": "A",
+   "from": 4,
+   "to": 12
+  },
+  {
+   "name": "B",
+   "from": 12,
+   "to": 20
+  },
+  {
+   "name": "A'",
+   "from": 20,
+   "to": 28
+  },
+  {
+   "name": "turn",
+   "from": 28,
+   "to": 32
+  },
+  {
+   "name": "last",
+   "from": 32,
+   "to": 40
+  }
+ ],
+ "chords": [
+  "Am",
+  "Am",
+  "F/G",
+  "Am",
+  "Am",
+  "Am",
+  "F",
+  "G",
+  "Am",
+  "Am",
+  "Dm",
+  "E",
+  "F",
+  "G",
+  "Am",
+  "Am",
+  "Dm",
+  "Em",
+  "F",
+  "G/E",
+  "Am",
+  "Am",
+  "F",
+  "G",
+  "Am",
+  "Am",
+  "Dm",
+  "E",
+  "F",
+  "G",
+  "E",
+  "E",
+  "Am",
+  "Am",
+  "F",
+  "G",
+  "Am",
+  "Am",
+  "F",
+  "E"
+ ],
+ "files": {
+  "drums": "battle_drums.m4a",
+  "harm": "battle_harm.m4a",
+  "lead": "battle_lead.m4a",
+  "intensity": "battle_intensity.m4a"
+ },
+ "levels": {
+  "drums": {
+   "active": -21.1,
+   "kb": 1476
+  },
+  "decodeShiftMs": 0,
+  "harm": {
+   "active": -21.2,
+   "kb": 1484
+  },
+  "lead": {
+   "active": -24.2,
+   "kb": 1306
+  },
+  "intensity": {
+   "active": -25.8,
+   "kb": 1466
+  }
+ }
+}

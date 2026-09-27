@@ -1,1 +1,52 @@
-<!doctype html><html lang="ja"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta http-equiv="refresh" content="0;url=review/"><title>ツインドラゴン変更確認</title><a href="review/">変更内容を確認する</a></html>
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>ツインドラゴン -TWIN DRAGON-</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<!-- [mobile] home-screen app: standalone on iOS (apple-*), installable on Android (manifest). docs/reports/mobile.md -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="assets/app/icon-180.png">
+<link rel="icon" href="data:,">
+<link rel="preload" as="image" href="/shibuya-cho/assets/menu/twin-dragon-logo-v1.png" fetchpriority="high">
+<style>
+  html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000;
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", "Meiryo", sans-serif; }
+  #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; touch-action: none; }
+  #hud { position: fixed; inset: 0; pointer-events: none; user-select: none; overflow: hidden; }
+  /* the loading screen: plain HTML so it is up before a single module has loaded; main.js moves the bar */
+  #boot { position: fixed; inset: 0; z-index: 100; background: #000; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; gap: 18px; color: #d8cfb8; pointer-events: none; transition: opacity .35s; }
+  #boot.off { opacity: 0; }
+  #boot .boot-logo { display: block; width: min(76vw, 580px); height: auto; max-height: 55vh; object-fit: contain; margin-bottom: 18px; }
+  #boot .bar { position: relative; width: 240px; height: 2px; background: rgba(255, 255, 255, .14); overflow: hidden; }
+  #boot .bar i { display: block; height: 100%; width: 0; background: #d9b56a; transition: width .25s ease-out; }
+  /* a glint running along the track on the compositor: it keeps moving while a long init holds the main thread */
+  #boot .bar::after { content: ''; position: absolute; left: 0; top: 0; width: 60px; height: 100%;
+    background: linear-gradient(90deg, rgba(255, 240, 200, 0), rgba(255, 240, 200, .55), rgba(255, 240, 200, 0));
+    animation: bootglint 1.6s linear infinite; will-change: transform; }
+  @keyframes bootglint { from { transform: translateX(-60px); } to { transform: translateX(240px); } }
+  #boot span { font-size: 12px; letter-spacing: .2em; color: #8f887a; font-variant-numeric: tabular-nums; }
+  @media(prefers-reduced-motion:reduce) { #boot, #boot .bar i { transition: none; } #boot .bar::after { animation: none; } }
+</style>
+<link rel="stylesheet" href="/shibuya-cho/src/ui/hud.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "/shibuya-cho/node_modules/three/build/three.module.js",
+    "three/addons/": "/shibuya-cho/node_modules/three/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+<div id="hud"></div>
+<div id="boot"><img class="boot-logo" src="/shibuya-cho/assets/menu/twin-dragon-logo-v1.png" width="1774" height="887" alt="ツインドラゴン — TWIN DRAGON" fetchpriority="high"><div class="bar"><i></i></div><span>読み込み中　0%</span></div>
+<script type="module" src="/shibuya-cho/src/main.js"></script>
+</body>
+</html>
