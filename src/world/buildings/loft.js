@@ -1,12 +1,17 @@
-// [city] LOFTY (渋谷ロフト) — 7-storey tan tile block on the north side of 井の頭通り: punched windows, storey
-// ledges, yellow LOFTY band + vertical blade + 2F yellow stripe, corner entrance canopy, rooftop plant.
+// [city] LOFTY (渋谷ロフト) — 7-storey tan tile block on the north side of 井の頭通り: punched windows set in real
+// tile piers and sills (relief.js curtainGrid), storey ledges, yellow LOFTY band + vertical blade + 2F yellow
+// stripe, corner entrance canopy, rooftop plant.
 import * as THREE from 'three';
 import * as L from './lib.js';
 import * as S from './shared.js';
+import * as R from './relief.js';
 import { getAtlases, tenantType, SHOP_OF_TYPE } from './genericBuilding.js';
 
 export const KEYS = ['loft'];
 export const SIZE = { w: 30, d: 28, h: 38 };
+// the tile colour of M.tileTan's wall, plain (a relief box shows no painted windows), with the same faint floodlight
+let tileMat = null;
+const tilePlain = () => tileMat || (tileMat = S.nightMaterial(Object.assign(L.std({ color: 0xc6b28e, roughness: 0.8, metalness: 0.05, emissive: 0xfff8f0 }), { name: 'lm_tilePlain' }), 0, 0.015));
 
 export function build({ key, data, batch, inst, group, rng, pools, isStreetSide }) {
   const M = S.mats(), At = getAtlases();
@@ -17,6 +22,8 @@ export function build({ key, data, batch, inst, group, rng, pools, isStreetSide 
   S.prism(batch, M.tileTan, poly, -0.2, H, { uvScale: 3.5 / SH });
   S.rings(batch, M.stoneLight, poly, GF, H - 0.5, SH, { out: 0.2, h: 0.3 });
   S.parapet(batch, M.stoneLight, poly, H, { h: 1.0, t: 0.35 });
+  // tile piers and sill bands standing on the painted punched windows: every window a real opening 0.25 m deep
+  for (const F of R.faces(poly, 5)) R.curtainGrid(batch, F, tilePlain(), { curtain: M.tileTan.userData.curtain, uvScale: 3.5 / SH, uStart: R.perimeterAt(poly, F.i), y0: GF + 0.3, y1: H, d: 0.25 });
   const tenants = ['LOFTY', 'LOFTY 文具', 'LOFTY コスメ', 'LOFTY 雑貨', 'STARBEANS COFFEE'];
   let ti = 0;
   for (let i = 0; i < poly.length; i++) {

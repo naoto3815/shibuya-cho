@@ -426,11 +426,19 @@ const BUS_TERMINALS = {
 // Openings in the ground (stair / escalator wells down to the station levels): streets.js leaves them out of the
 // terrain grid and the pavement, the owning builder lines and fences them. Axis-aligned rectangles.
 // The JR station's south block under the tracks (1F 南改札 + 東口), pass 12: from the station's east face to Scramble
-// Square's west face / the viaduct's east edge, z 84 → 玉川通り; `opening` = the 東口 recess on its east face (two
-// consecutive outline vertices)
+// Square's west face / the viaduct's east edge, z 84 → 玉川通り; `opening` = the 東口 on its east face (two
+// consecutive outline vertices, north end first).
+// `passage` (client: 「ここも、実際、向こう側まで行けるようになっている。改札口は正面ではなく、左手にあるはず」): the 1F
+// 東西自由通路 under the tracks — 南改札を出て左が西口、右が東口. From the 東口 straight in (the opening's normal, which
+// runs between two of the viaduct's portal-frame rows) to the main station block's east face (x 84), then due west
+// through the station block to its west face (x 40) = 西口, onto the pavement along the 東急 frontage. Its north wall
+// is the opening's north side carried to x 84; `zS` = the south wall of the western leg; `h` = ceiling (under the
+// portal frames' pier heads, 3.65 m). `gate` = the 南改札 line in a recess on the south wall (on the left walking in
+// from 東口): s0..s1 metres in from the 東口 face, the paid concourse `depth` metres deep behind it (not walkable).
 const STATION_SOUTH = {
   polygon: [[84, 84], [96.1, 84], [98.6, 90.1], [102.4, 99.3], [104.5, 104.4], [107.1, 104.4], [114.2, 123.8], [125.3, 145.1], [133.5, 157], [136, 164], [104.5, 166], [100.8, 159.6], [88.1, 135.2], [84, 124]],
   opening: [[98.6, 90.1], [102.4, 99.3]],
+  passage: { zS: 105.5, h: 3.6, gate: { s0: 4.4, s1: 15.1, depth: 7 } },
 };
 const GROUND_HOLES = [
   {id:'shinsen_rail_cutting',x0:-646,z0:240,x1:-578,z1:258},

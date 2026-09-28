@@ -107,6 +107,9 @@ function curtainMat(name, opts, { roughness = 0.25, metalness = 0.6, env = 1.2, 
   const t = curtainTex(opts);
   const m = new THREE.MeshStandardMaterial({ map: t.map, emissiveMap: t.emissiveMap, emissive: 0xffffff, emissiveIntensity: night, roughness, metalness, envMapIntensity: env });
   m.name = 'lm_' + name; m.userData.keepShadow = true;
+  // the painted window layout (UV metres), so relief.js can stand real piers / sill bands on the painted grid
+  const tw = !!opts.tower, st = tw ? 24 : (opts.storeys ?? 8);
+  m.userData.curtain = { W: opts.W ?? 12, H: tw ? 84 : (opts.H ?? 28), bays: opts.bays ?? 8, storeys: st, punched: opts.punched ?? 0, spandrelFrac: opts.spandrelFrac ?? 0.26, topFrac: 3 / ((tw ? 2048 : 512) / st) };
   nightMats.push({ mat: m, day, night });
   return m;
 }

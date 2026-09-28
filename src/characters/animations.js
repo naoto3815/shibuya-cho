@@ -26,7 +26,7 @@ export const PED_CLIPS = ['walk_chat', 'walk_chat_r', 'walk_phone', 'idle_wait',
 export const PED_MIRRORED = ['walk_phone', 'idle_wait', 'idle_phone_call', 'greet_wave', 'talk_stand', 'window_look', 'argue', 'argue_back', 'laugh'];
 export const CLIPS = ['idle', 'idle_combat', 'walk', 'run', 'jab', 'straight', 'hook', 'uppercut', 'kick', 'roundhouse', 'guard', 'guard_hit', 'dodge',
   'hit_light', 'hit_heavy', 'knockdown', 'getup', 'grab', 'throw', 'heat_finisher', 'taunt', 'stumble', 'dead', 'sit', 'phone', 'smoke', ...PED_CLIPS,
-  ...PED_MIRRORED.map((n) => n + '_m')];
+  ...PED_MIRRORED.map((n) => n + '_m'), 'bus_sit', 'bus_strap'];
 
 // nominal durations (s) — selfTest checks these
 export const DURATIONS = {
@@ -35,6 +35,7 @@ export const DURATIONS = {
   heat_finisher: 1.6, taunt: 1.5, stumble: 0.8, dead: 2.0, sit: 6.0, phone: 4.0, smoke: 4.0,
   walk_chat: 3.3, walk_chat_r: 3.3, walk_phone: 2.3, idle_wait: 11.0, idle_phone_call: 6.0, greet_wave: 1.6, greet_bow: 1.4, talk_stand: 6.0, talk_listen: 5.2,
   window_look: 7.0, argue: 4.0, argue_back: 4.0, laugh: 2.0, look_around: 3.4, sit_rail: 6.0,
+  bus_sit: 8.0, bus_strap: 8.0,
 };
 for (const n of PED_MIRRORED) DURATIONS[n + '_m'] = DURATIONS[n];
 // locomotion nominal speeds (m/s) — must match player.js WALK/RUN so feet do not slide at timeScale 1
@@ -1187,6 +1188,34 @@ const PED_BUILDERS = {
       { t: 5.4, pose: mix(look(S, 10), { ikR: [-0.11, AY + 0.04, 0.20, 4, 12] }) },
       { t: 5.6, pose: look(S, 10) },
       { t: 6.0, pose: look(S, 10) },
+    ], { loop: true });
+  },
+  // bus passengers (traffic.js busPax, drawn by crowdScan's instanced scans). Keys every 2 s of an 8 s loop, so the
+  // 4-frame vertex-animation bake (crowdScan CLIP_WANT) holds every key exactly.
+  // bus_sit: on a bus seat (seat ≈ 0.45 m, the root on the floor under the standing pelvis): back against the
+  // backrest, feet on the floor ahead, hands in the lap; looks ahead, out of the window, dozes, looks across.
+  bus_sit: () => {
+    const B = { hips: [0, -0.42, -0.06], Hips: [-12, 0, 0], Spine: [4, 0, 0], Spine1: [2, 0, 0], Spine2: [0, 0, 0], Neck: [5, 0, 0], Head: [4, 0, 0],
+      LeftShoulder: [2, 0, -1], RightShoulder: [2, 0, -1], LeftHand: [-8, 0, -12], RightHand: [-8, 0, 12],
+      ikL: [0.12, AY, 0.40, 0, 8], ikR: [-0.12, AY, 0.38, 0, 10] };
+    const S = armAt(armAt(B, 'Left', [0.12, 0.66, 0.12], [0.28, 0.82, -0.08], 30), 'Right', [-0.12, 0.66, 0.12], [-0.28, 0.82, -0.08], 30);
+    return makeClip('bus_sit', [
+      { t: 0, pose: look(S, 4, 2) },
+      { t: 2, pose: look(S, 34, -2) },
+      { t: 4, pose: look(S, 6, 16) },
+      { t: 6, pose: look(S, -18, 0) },
+      { t: 8, pose: look(S, 4, 2) },
+    ], { loop: true });
+  },
+  // bus_strap: standing in the aisle, the right hand on a hanging strap overhead (wrist ≈ 1.80 m), the left arm down
+  bus_strap: () => {
+    const S = armAt(add(PED_A, { RightShoulder: [2, 0, 6] }), 'Right', [-0.15, 1.80, 0.08], [-0.43, 1.55, 0.10], -20, [-10, 0, 0]);
+    return makeClip('bus_strap', [
+      { t: 0, pose: look(S, 2) },
+      { t: 2, pose: look(S, -26, -2) },
+      { t: 4, pose: look(S, 4, 14) },
+      { t: 6, pose: look(S, 18, 0) },
+      { t: 8, pose: look(S, 2) },
     ], { loop: true });
   },
 };

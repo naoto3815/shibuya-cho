@@ -106,6 +106,21 @@ function concourseCanvas() {
 }
 /** ICカード自動改札機 bank: body, green top plate, blue reader, orange flap doors, one merged vertex-coloured mesh. */
 let gateMat = null;
+/** The 南改札 passage's own surfaces (tile, floor, ceiling): the station set with a lit look — a fluorescent-lit station
+ *  passage reads bright, and the few pooled point lights reach only part of it. Emissive follows the night factor. */
+let passMats = null;
+function passageMats(M) {
+  if (passMats) return passMats;
+  const lit = (base, name, day, night) => { const m = base.clone(); m.name = name; m.emissive = new THREE.Color(0xffffff); if (base.map) m.emissiveMap = base.map; return S.nightMaterial(m, day, night); };
+  passMats = { tile: lit(M.tile, 'lm_passTile', 0.22, 0.3), floor: lit(M.stoneLight, 'lm_passFloor', 0.14, 0.2), ceil: lit(M.whiteMetal, 'lm_passCeil', 0.2, 0.45) };
+  // the battens stay on by day (the shared glowWhite is dark in daylight and read as black bars on the lit ceiling)
+  const light = L.std({ color: 0xf4f0e6, emissive: 0xf4f0e6, roughness: 0.5, metalness: 0 }); light.name = 'lm_passLight'; light.userData.noShadow = true;
+  passMats.light = S.nightMaterial(light, 0.9, 1.35);
+  // the ceiling is the passage's only sun-stop (the block tops are up-facing caps, which cast no shadow): it must cast
+  // even though its few triangles are merged city-wide
+  passMats.ceil.userData.keepShadow = true;
+  return passMats;
+}
 function icGates(batch, x0, z0, z1, depth, pitch = 0.9) {
   if (!gateMat) { gateMat = L.std({ vertexColors: true, roughness: 0.45, metalness: 0.2, emissive: 0x000000 }); gateMat.name = 'lm_icGate'; }
   const col = (g, hex) => { const c = new THREE.Color(hex), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
@@ -143,6 +158,49 @@ const WEST_N = 15.6;                                         // the west buildin
 // the under-track block's north face (OSM, slanted), never closer than 2.4 m to 宮益坂's kerb (≈ z 10.9 there): the
 // real ガード下 pavement is narrow but walkable, guard pipe and all (client: 「ここの通りは実際は狭いが、通れるはず」)
 const northFace = (x) => Math.max(14.5 - 0.102 * (x - 59.4), 13.3);
+/**
+ * The 1F 東西自由通路 of the 南改札 (CITY.stationSouth.passage): 東口 (the south block's opening) → straight in along the
+ * opening's normal I to the main block's east face xe → due west to its west face xw (西口). Local frame of the eastern
+ * leg: at(s, n) = B + s·I + n·N, B = the opening's south end, N = across the passage toward its north wall (n = 0 the
+ * south wall, n = ow the north wall). Returns null without the data.
+ */
+function southPassage(CITY, xw, xe) {
+  const SB = CITY && CITY.stationSouth, P = SB && SB.passage;
+  if (!P || !SB.opening) return null;
+  let [A, B] = SB.opening;
+  if (A[1] > B[1]) [A, B] = [B, A];                                        // A = north end, B = south end
+  const ow = Math.hypot(A[0] - B[0], A[1] - B[1]), N = [(A[0] - B[0]) / ow, (A[1] - B[1]) / ow];
+  let I = [-N[1], N[0]];
+  if (!L.pointInPoly((A[0] + B[0]) / 2 + I[0], (A[1] + B[1]) / 2 + I[1], SB.polygon)) I = [-I[0], -I[1]];
+  const at = (s, n) => [B[0] + I[0] * s + N[0] * n, B[1] + I[1] * s + N[1] * n];
+  const sN = (xe - A[0]) / I[0], zN = A[1] + I[1] * sN, An = [xe, zN];      // north wall meets the station's east face
+  const sS = (P.zS - B[1]) / I[1], Bs = at(sS, 0);                          // south wall bends due west at z = zS
+  const g = P.gate, G0 = at(g.s0, 0), G1 = at(g.s1, 0), G0d = at(g.s0, -g.depth), G1d = at(g.s1, -g.depth);
+  return {
+    A, B, I, N, ow, at, zN, zS: P.zS, An, Bs, sN, sS, h: P.h, xw, xe, gate: g, G0, G1, G0d, G1d,
+    rot: Math.atan2(-I[1], I[0]),                                          // boxAt rotY with local x along I
+    poly: [A, B, G0, G1, Bs, [xw, P.zS], [xw, zN], An],                    // the walkable floor
+    notch: [G0, G0d, G1d, G1],                                             // gate recess + paid concourse
+  };
+}
+/** Conservative "solid all through" fill of a polygon: horizontal bands `step` deep, each box spanning only what is
+ *  inside the outline over the whole band (so a slanted wall never gets a collider sticking out of it). */
+function fillColliders(poly, h, step = 1.5, inset = 0.3) {
+  const out = [], b = L.polyBounds(poly);
+  const cuts = (z) => { const xs = []; for (let i = 0; i < poly.length; i++) { const p = poly[i], q = poly[(i + 1) % poly.length]; if ((p[1] > z) !== (q[1] > z)) xs.push(p[0] + (q[0] - p[0]) * (z - p[1]) / (q[1] - p[1])); } return xs.sort((u, v) => u - v); };
+  const band = (za, zb) => {
+    const zs = [za + 0.01, zb - 0.01];
+    for (const p of poly) if (p[1] > za && p[1] < zb) zs.push(p[1] - 0.01, p[1] + 0.01);
+    const lists = zs.map(cuts), n = lists[0].length;
+    if (lists.some((l) => l.length !== n)) { if (zb - za > 0.4) { const m = (za + zb) / 2; band(za, m); band(m, zb); } return; }   // a notch starts / ends in it
+    for (let k = 0; k + 1 < n; k += 2) {
+      const xa = Math.max(...lists.map((l) => l[k])) + inset, xb = Math.min(...lists.map((l) => l[k + 1])) - inset;
+      if (xb - xa > 0.5) out.push(S.boxCollider((xa + xb) / 2, (za + zb) / 2, xb - xa, h, zb - za));
+    }
+  };
+  for (let za = b.z0; za < b.z1 - 0.2; za += step) band(za, Math.min(b.z1, za + step));
+  return out;
+}
 /** Recess back (paid concourse: stair + escalators up to the platforms, commuters) and the header band over the gates
  *  (name board, three 発車標, the 運賃表), one 2048 × 768 canvas. */
 function gateCanvas2(gateName = 'ハチ公改札', gateEn = 'Hachiko Gate') {
@@ -229,12 +287,15 @@ export function build({ key, data, batch, inst, group, rng, world, pools, engine
   const lighting = engine && engine.get ? engine.get('lighting') : null;
   const fixture = (x, y, z, color, intensity, distance) => { if (lighting && lighting.addFixture) lighting.addFixture({ pos: [x, y, z], color, intensity, distance, kind: 'station' }); };
   if (CITY) (CITY.propFree || (CITY.propFree = [])).push([[x0, PAS.z0], [x1 + 0.5, PAS.z0], [x1 + 0.5, GATE.z1], [x0, GATE.z1]]);   // no street dressing in the passage
+  // the 南改札 東西自由通路 (東口 → 西口) cuts the block south of the 東急 frontage's middle: z SP.zN..SP.zS here
+  const SP = southPassage(CITY, x0, x1);
+  const cutZ = (za, zb) => (SP && za < SP.zN && zb > SP.zS ? [[za, SP.zN], [SP.zS, zb]] : [[za, zb]]);   // a z-run split round it
   // ---- west building: 0–6.5 concourse level (glass in front of a 1.5 m deep lit recess), 6.5–18 concrete with windows
   const wb = [[x0, zw], [gx, zw], [gx, z1], [x0, z1]];
   const RD = 1.5;                                                             // concourse recess depth behind the glass
   S.prism(batch, M.concreteWin, wb, 6.5, H, { uvScale: 3.5 / 3.8 });
-  // the concourse-level tile box, split at the ハチ公口 mouth (one box across it walled the passage off)
-  for (const [za, zb] of [[zw, gz0], [gz1, z1]]) batch.add(M.tile, L.extrudePolygon([[x0 + RD, za], [gx, za], [gx, zb], [x0 + RD, zb]], -0.2, 6.5, { cap: false, uvScale: 0.5 }), px, pz);
+  // the concourse-level tile box, split at the ハチ公口 mouth (one box across it walled the passage off) and the 西口
+  for (const [za, zb] of [[zw, gz0], ...cutZ(gz1, z1)]) batch.add(M.tile, L.extrudePolygon([[x0 + RD, za], [gx, za], [gx, zb], [x0 + RD, zb]], -0.2, 6.5, { cap: false, uvScale: 0.5 }), px, pz);
   S.rings(batch, M.concrete, wb, 6.5, H - 0.5, 3.8, { out: 0.25, h: 0.3 });
   S.parapet(batch, M.concrete, wb, H, { h: 1.1, t: 0.4 });
   // glazed spans: painted concourse wall at the back of the recess, real floor + soffit + strip lights in front
@@ -258,7 +319,7 @@ export function build({ key, data, batch, inst, group, rng, world, pools, engine
     batch.add(M.darkMetal, L.boxAt(x0 - 0.1, 5.35, cz, 0.2, 0.4, w, 0, false), px, pz);                                  // head rail
     for (let z = za; z <= zb; z += 3.2) S.ibox(inst, 'lm_mullion', M.darkMetal, x0 - 0.1, 0.15, z, 0.3, 5.4, 0.16);
   }
-  for (const [za, zb] of [[zw, Math.min(gz0, zw + 0.5)], [gz0 - 0.5, gz0], [gz1, gz1 + 0.5], [gz1 + 26, z1]]) if (zb - za > 0.05) batch.add(M.tile, L.boxAt(x0 + RD / 2, 3.15, (za + zb) / 2, RD, 6.7, zb - za, 0, true), px, pz);   // tile piers / solid wall
+  for (const [za, zb] of [[zw, Math.min(gz0, zw + 0.5)], [gz0 - 0.5, gz0], [gz1, gz1 + 0.5], ...cutZ(gz1 + 26, z1)]) if (zb - za > 0.05) batch.add(M.tile, L.boxAt(x0 + RD / 2, 3.15, (za + zb) / 2, RD, 6.7, zb - za, 0, true), px, pz);   // tile piers / solid wall
   const mosaic = L.signMaterial(mosaicCanvas(), { emissive: 0.35, roughness: 0.6 });
   const mm = new THREE.Mesh(new THREE.PlaneGeometry(12, 3.6), mosaic); L.placeFacing(mm, x0 - 0.08, 3.6, gz1 + 34, -1, 0); group.add(mm);
   batch.add(M.stoneLight, L.boxAt(x0 - 0.03, 0.9, gz1 + 34, 0.06, 1.8, 12.4, 0, false), px, pz);
@@ -285,7 +346,10 @@ export function build({ key, data, batch, inst, group, rng, world, pools, engine
   // ---- south of the mosaic: the 東急 東横店 frontage — station shops under a lit canopy, the store name board above
   {
     const za = gz1 + 41, zb = z1 - 2;
-    S.shopRow(batch, At, [x0, zb], [x0, za], -1, 0, ['東急フードショー', 'ポッポ', 'マツモトキヨヒ', 'STARBEANS COFFEE', '成城石丼', 'ドトルコーヒー', '東急百貨店', 'サンドラック'], { gf: 4.6, rng, pools, typeOf: tenantType, shopOf: SHOP_OF_TYPE, fi: 190, minW: 6, maxW: 8, lift: 0.05 });
+    const tenants = ['東急フードショー', 'ポッポ', 'マツモトキヨヒ', 'STARBEANS COFFEE', '成城石丼', 'ドトルコーヒー', '東急百貨店', 'サンドラック'];
+    // (split round the 西口 mouth of the 南改札 passage, 1.2 m tile piers either side of it)
+    const rows = SP ? [[zb, SP.zS + 1.2, tenants.slice(0, 3)], [SP.zN - 1.2, za, tenants.slice(3)]] : [[zb, za, tenants]];
+    for (const [ra, rb, list] of rows) S.shopRow(batch, At, [x0, ra], [x0, rb], -1, 0, list, { gf: 4.6, rng, pools, typeOf: tenantType, shopOf: SHOP_OF_TYPE, fi: 190, minW: 6, maxW: 8, lift: 0.05 });
     batch.add(M.silver, L.boxAt(x0 - 1.0, 4.75, (za + zb) / 2, 2.0, 0.3, zb - za, 0, false), px, pz);                  // canopy
     batch.add(M.whiteMetal, L.boxAt(x0 - 1.99, 4.75, (za + zb) / 2, 0.04, 0.34, zb - za, 0, false), px, pz);
     for (let z = za + 1.5; z < zb; z += 3) S.ibox(inst, 'lm_downlight', M.glowWarm, x0 - 1.0, 4.54, z, 0.4, 0.06, 0.4);
@@ -296,7 +360,9 @@ export function build({ key, data, batch, inst, group, rng, world, pools, engine
   //      pavement, the 東西自由通路 behind it, the ハチ公改札 recess on the passage's south side, solid beyond
   const UH = 5.3, zA = northFace(gx), zB = northFace(x1);
   S.prism(batch, M.concrete, [[gx, zA], [x1, zB], [x1, PAS.z0], [gx, PAS.z0]], 0, UH, { uvScale: 0.5 });
-  S.prism(batch, M.concrete, [[gx, PAS.z1], [GATE.x0, PAS.z1], [GATE.x0, GATE.z1], [GATE.x1, GATE.z1], [GATE.x1, PAS.z1], [x1, PAS.z1], [x1, z1], [gx, z1]], 0, UH, { uvScale: 0.5 });
+  const zMid = SP ? SP.zN : z1;                                              // (the 南改札 passage splits it at z SP.zN..SP.zS)
+  S.prism(batch, M.concrete, [[gx, PAS.z1], [GATE.x0, PAS.z1], [GATE.x0, GATE.z1], [GATE.x1, GATE.z1], [GATE.x1, PAS.z1], [x1, PAS.z1], [x1, zMid], [gx, zMid]], 0, UH, { uvScale: 0.5 });
+  if (SP) S.prism(batch, M.concrete, [[gx, SP.zS], [x1, SP.zS], [x1, z1], [gx, z1]], 0, UH, { uvScale: 0.5 });
   batch.add(M.concrete, L.boxAt((gx + x1) / 2 - rd / 2, (PAS.h + UH) / 2, (PAS.z0 + PAS.z1) / 2, x1 - gx + rd, UH - PAS.h, PAS.z1 - PAS.z0, 0, true), px, pz);   // slab over the passage
   {
     // the ガード下 eateries facing the pavement (OSM: カレー厨房, a cafe, 千代松, Kawakei — near-names)
@@ -369,70 +435,172 @@ export function build({ key, data, batch, inst, group, rng, world, pools, engine
     for (let k = 0; k < 4; k++) S.ibox(inst, 'lm_downlight', M.glowWhite, x1 + 0.6, PAS.h - 0.1, pz0 + 1 + k * 2, 0.4, 0.06, 0.4);
     fixture(x1 + 1.5, 3.8, mz, 0xf2f5ff, 22, 10);
   }
-  // ---- the south concourse under the tracks (JR 1F 南改札) and its 東口 (pass 12). South of the 東口 terminal the
-  //      ground under the viaduct was open floor from the station's east face to Scramble Square; in reality it is the
-  //      station itself (OSM building 904652357): the 1F 南改札 concourse with the 東口 opening east onto the little
-  //      square in front of Scramble Square's 1F entrance, the escalators down to the subway gates straight ahead
-  //      (「東口を出て正面には地下鉄の改札へと続くエスカレーター、右側には渋谷スクランブルスクエアの1F入口」)
-  if (CITY) {
-    const SB = CITY.stationSouth;
-    if (SB) {
-      const blk = SB.polygon, A = SB.opening[0], B = SB.opening[1], DEP = 7, HH = 5.3;
-      const ow = Math.hypot(B[0] - A[0], B[1] - A[1]), dx = (B[0] - A[0]) / ow, dz = (B[1] - A[1]) / ow;
-      let ix = -dz, iz = dx; { const mx = (A[0] + B[0]) / 2 + ix, mz = (A[1] + B[1]) / 2 + iz; if (!L.pointInPoly(mx, mz, blk)) { ix = -ix; iz = -iz; } }
-      const A2 = [A[0] + ix * DEP, A[1] + iz * DEP], B2 = [B[0] + ix * DEP, B[1] + iz * DEP];
-      // the outline with the recess notched in (walls + a solid fill in slices, walls also facing inward)
-      const ai = blk.findIndex((p) => p[0] === A[0] && p[1] === A[1]);
-      const ring = ai >= 0 ? [...blk.slice(0, ai + 1), A2, B2, ...blk.slice(ai + 1)] : blk;
-      S.prism(batch, M.concrete, ring, 0, HH, { uvScale: 0.5 });
-      batch.add(M.concrete, L.flipGeo(L.extrudePolygon(ring, 0, HH, { cap: false, uvScale: 0.5 })), A[0], A[1]);
-      batch.add(M.tile, L.extrudePolygon(ring, 0.15, 3.9, { cap: false, uvScale: 0.5 }), A[0], A[1]);
-      colliders.push(...L.edgeColliders(ring, HH, 1.6));
-      // solid all through: 3 m scan-line slices of the outline (nothing walkable inside the block)
-      { const b = L.polyBounds(ring);
-        for (let z = b.z0 + 1.5; z < b.z1; z += 3) {
-          const xs = [];
-          for (let i = 0; i < ring.length; i++) { const p = ring[i], q = ring[(i + 1) % ring.length]; if ((p[1] > z) !== (q[1] > z)) xs.push(p[0] + (q[0] - p[0]) * (z - p[1]) / (q[1] - p[1])); }
-          xs.sort((u, v) => u - v);
-          for (let k = 0; k + 1 < xs.length; k += 2) { const w = xs[k + 1] - xs[k] - 0.8; if (w > 0.5) colliders.push(S.boxCollider((xs[k] + xs[k + 1]) / 2, z, w, HH, 3.05)); }
-        } }
-      // the JR green band + tiled face along the square
-      const tl = Math.hypot(B[0] - A[0], B[1] - A[1]);
-      // recess: floor, ceiling, side walls, the gate line, header band, paid concourse back wall
-      const mx = (A[0] + B[0]) / 2, mz = (A[1] + B[1]) / 2, r = Math.atan2(-dz, dx);
-      batch.add(M.stoneLight, L.polygonCap([A, B, B2, A2], 0.17, 0.5), mx, mz);
-      batch.add(M.whiteMetal, L.extrudePolygon([A, B, B2, A2], 3.85, 3.95, { cap: false, bottom: true, sides: false }), mx, mz);
-      for (const [p, q] of [[A, A2], [B2, B]]) { const l = Math.hypot(q[0] - p[0], q[1] - p[1]), nx2 = (q[1] - p[1]) / l, nz2 = -(q[0] - p[0]) / l, cx = (p[0] + q[0]) / 2, cz = (p[1] + q[1]) / 2, [ox, oz] = L.pointInPoly(cx + nx2, cz + nz2, [A, B, B2, A2]) ? [nx2, nz2] : [-nx2, -nz2]; batch.add(M.tile, L.wallQuad(cx, 2.05, cz, ox, oz, l, 3.8, 0.02), mx, mz); }
-      const gm = L.signMaterial(gateCanvas2('南改札', 'South Gate'), { emissive: 0.5, roughness: 0.55 });
-      const bx = (A2[0] + B2[0]) / 2, bz = (A2[1] + B2[1]) / 2;
-      batch.add(gm, L.wallQuad(bx, 0.15 + (3.75 - 0.15) / 2, bz, -ix, -iz, tl, 3.6, 0.02, [0, 1 / 3, 1, 1]), mx, mz);
-      const gx0 = mx + ix * 3.2, gz0 = mz + iz * 3.2;
-      batch.add(gm, L.wallQuad(gx0, 3.35, gz0, -ix, -iz, tl, 1.1, 0.03, [0, 0, 1, 1 / 3]), mx, mz);
-      batch.add(M.whiteMetal, L.boxAt(gx0 + ix * 0.1, 3.35, gz0 + iz * 0.1, tl, 1.1, 0.2, r, false), mx, mz);
-      if (!gateMat) { gateMat = L.std({ vertexColors: true, roughness: 0.45, metalness: 0.2, emissive: 0x000000 }); gateMat.name = 'lm_icGate'; }
-      const col = (g, hex) => { const c = new THREE.Color(hex), n = g.attributes.position.count, a = new Float32Array(n * 3); for (let i = 0; i < n; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
-      const rg = Math.atan2(-iz, ix);                                                     // cabinet long axis along the walk
-      for (let t = 1.6, k = 0; t <= tl - 1.2; t += 0.9, k++) {
-        const x = A[0] + dx * t + ix * 3.2, z = A[1] + dz * t + iz * 3.2;
-        batch.add(gateMat, col(L.boxAt(x, 0.65, z, 1.3, 1.0, 0.22, rg, false), 0xc4c8cc), x, z);
-        batch.add(gateMat, col(L.boxAt(x, 1.17, z, 1.32, 0.05, 0.24, rg, false), k % 3 === 2 ? 0x2b6bd6 : 0x1d8f3e), x, z);
+  // ---- the south block under the tracks (JR 1F 南改札) and its 東口 (pass 12), and the 1F 東西自由通路 through it (pass
+  //      13). South of the 東口 terminal the ground under the viaduct is the station itself (OSM building 904652357),
+  //      solid but for the free passage: in at the 東口 (the little square in front of Scramble Square's 1F entrance,
+  //      the escalators down to the subway gates straight ahead — 「東口を出て正面には地下鉄の改札へと続くエスカレーター、
+  //      右側には渋谷スクランブルスクエアの1F入口」), under the tracks and through the station block to the 西口 on the 東急
+  //      frontage. The 南改札 faces north into it from a recess in its south wall, so walking in from 東口 the gates are
+  //      on the left: 「南改札を出た先は左右に広がっていて、左が西口（フクラス方面）、右が東口（東横線・副都心線方面）」.
+  if (CITY && CITY.stationSouth) {
+    const SB = CITY.stationSouth, blk = SB.polygon, HH = 5.3, n = blk.length;
+    const same = (p, q) => Math.abs(p[0] - q[0]) < 1e-6 && Math.abs(p[1] - q[1]) < 1e-6;
+    const ai = SP ? blk.findIndex((p) => same(p, SP.A)) : -1, bi = SP ? blk.findIndex((p) => same(p, SP.B)) : -1;
+    // the outline edge on the station's east face (x = x1) that the passage crosses
+    const wi = SP ? blk.findIndex((p, i) => { const q = blk[(i + 1) % n]; return Math.abs(p[0] - x1) < 1e-6 && Math.abs(q[0] - x1) < 1e-6 && Math.min(p[1], q[1]) < SP.zN && Math.max(p[1], q[1]) > SP.zS; }) : -1;
+    const cyc = (from, to) => { const out = []; for (let k = from; ; k = (k + 1) % n) { out.push(blk[k]); if (k === to) break; } return out; };
+    // the solid pieces either side of the passage (walls both ways, a tile skin, colliders all through)
+    const pieces = SP && ai >= 0 && bi >= 0 && wi >= 0
+      ? [[SP.An, ...cyc((wi + 1) % n, ai)], [...cyc(bi, wi), [x1, SP.zS], SP.Bs, SP.G1, SP.G1d, SP.G0d, SP.G0]]
+      : [blk];
+    const PM = passageMats(M), tileUV = (w, hh) => [0, 0, w * 0.5, hh * 0.5];                   // 16.7 cm wall tile
+    const inPass = (x, z) => SP && (L.pointInPoly(x, z, SP.poly) || L.pointInPoly(x, z, SP.notch));
+    for (const piece of pieces) {
+      const c = L.polyCentroid(piece);
+      S.prism(batch, M.concrete, piece, 0, HH, { uvScale: 0.5 });
+      batch.add(M.concrete, L.flipGeo(L.extrudePolygon(piece, 0, HH, { cap: false, uvScale: 0.5 })), c[0], c[1]);
+      // the tile skin, 2 cm proud of the concrete: the passage's lit tile inside, the plain station tile outside
+      const skin = L.offsetPolygon(L.ensureCW(piece), 0.02);
+      for (let i = 0; i < skin.length; i++) {
+        const p = skin[i], q = skin[(i + 1) % skin.length], len = Math.hypot(q[0] - p[0], q[1] - p[1]), [nx, nz] = L.edgeNormal(skin, i), mx = (p[0] + q[0]) / 2, mz = (p[1] + q[1]) / 2;
+        if (len < 0.05 || (nx < -0.9 && Math.abs(mx - x1) < 0.1)) continue;                    // (the face against the main block)
+        batch.add(inPass(mx + nx * 0.3, mz + nz * 0.3) ? PM.tile : M.tile, L.wallQuad(mx, (0.15 + 3.9) / 2, mz, nx, nz, len, 3.75, 0, tileUV(len, 3.75)), mx, mz);
       }
-      colliders.push(S.boxCollider(gx0, gz0, tl, 1.4, 1.4, r));
-      for (let t = 1.0; t < tl; t += 2.2) S.ibox(inst, 'lm_stripLight', M.glowWhite, A[0] + dx * t + ix * 1.6, 3.8, A[1] + dz * t + iz * 1.6, 0.16, 0.05, 1.6, r);
-      const lighting = engine && engine.get ? engine.get('lighting') : null;
-      if (lighting && lighting.addFixture) lighting.addFixture({ pos: [mx + ix * 2, 3.5, mz + iz * 2], color: 0xf4f6ff, intensity: 22, distance: 11, kind: 'station' });
-      (CITY.propFree || (CITY.propFree = [])).push([A, B, B2, A2]);
-      // the 東口 sign over the opening and the JR band
-      S.signQuad(batch, mx - ix * 0.08, HH - 0.55, mz - iz * 0.08, -ix, -iz, { text: 'JP 渋谷町駅  東口', sub: '南改札 South Gate  ・  山手線 ・ 埼京線 ・ 湘南新宿ライン', w: Math.min(tl, 9), h: 0.95, bg: '#1d8f3e', fg: '#ffffff', emissive: 0.4, weight: '900' });
-      // the subway escalators in front (CITY.groundHoles 'higashiguchi'), with their board
-      const hole = (CITY.groundHoles || []).find((h) => h.id === 'higashiguchi');
-      if (hole) {
-        well(batch, inst, hole, colliders, { title: '東京メトロ 半蔵門線 ・ 副都心線  東急東横線 ・ 田園都市線', sub: '地下鉄のりば  B2F  Subway Lines ↓', escalators: true });
-        const hx = (hole.x0 + hole.x1) / 2;
-        S.signQuad(batch, hx, 2.6, hole.z0 - 0.05, 0, -1, { text: '地下鉄 のりかえ ↓', sub: 'Metro ・ Tokyu Lines', w: 4.2, h: 0.6, bg: '#ffd400', fg: '#111111', emissive: 0.4, weight: '800', double: true });
-        batch.add(M.darkMetal, L.boxAt(hx - 2.2, 1.35, hole.z0 - 0.1, 0.08, 2.4, 0.08, 0, false), hx, hole.z0);
-        batch.add(M.darkMetal, L.boxAt(hx + 2.2, 1.35, hole.z0 - 0.1, 0.08, 2.4, 0.08, 0, false), hx, hole.z0);
+      colliders.push(...L.edgeColliders(piece, HH, 1.6), ...fillColliders(piece, HH));
+    }
+    if (SP) {
+      const { A, B, I, N, at, h, gate: G, rot } = SP, ow = SP.ow, zN = SP.zN, zS = SP.zS, xw = x0, xe = x1;
+      const propFree = CITY.propFree || (CITY.propFree = []);
+      propFree.push(SP.poly, SP.notch, [A, [A[0] - I[0] * 4, A[1] - I[1] * 4], [B[0] - I[0] * 4, B[1] - I[1] * 4], B],   // + 4 m clear in
+        [[xw - 4, zN - 0.5], [xw, zN - 0.5], [xw, zS + 0.5], [xw - 4, zS + 0.5]]);                                         // front of both mouths
+      // ---- shell: the top over the eastern leg + the gate recess (the pieces' caps + this = the whole block), the
+      //      step down from the west building to the under-track roof, the lintels over both mouths
+      batch.add(M.concrete, L.polygonCap([A, B, SP.G0, SP.G0d, SP.G1d, SP.G1, SP.Bs, [xe, zS], SP.An], HH, 0.5), A[0], A[1]);
+      batch.add(M.concrete, L.polygonCap([[gx, zN], [xe, zN], [xe, zS], [gx, zS]], UH, 0.5), (gx + xe) / 2, zN);
+      batch.add(M.tile, L.wallQuad(gx, (UH + 6.5) / 2, (zN + zS) / 2, 1, 0, zS - zN, 6.5 - UH, 0, tileUV(zS - zN, 6.5 - UH)), gx, zN);
+      {
+        const mx = (A[0] + B[0]) / 2, mz = (A[1] + B[1]) / 2;
+        batch.add(M.concrete, L.wallQuad(mx, (h + HH) / 2, mz, -I[0], -I[1], ow, HH - h, 0, [0, h * 0.5, ow * 0.5, HH * 0.5]), mx, mz);
+        batch.add(M.tile, L.wallQuad(mx, (h + 3.9) / 2, mz, -I[0], -I[1], ow, 3.9 - h, 0.02, tileUV(ow, 3.9 - h)), mx, mz);
       }
+      batch.add(M.tile, L.wallQuad(xw, (h + 6.5) / 2, (zN + zS) / 2, -1, 0, zS - zN, 6.5 - h, 0, [0, 0, zS - zN, 6.5 - h]), xw, zN);   // (metre UVs like the frontage's tile piers)
+      // ---- floor, ceiling, the western leg's tiled walls (the eastern leg's are the pieces' tile skin)
+      batch.add(PM.floor, L.polygonCap(SP.poly, 0.17, 0.5), (xw + xe) / 2, zN);
+      batch.add(PM.ceil, L.extrudePolygon(SP.poly, h, h + 0.02, { cap: false, bottom: true, sides: false }), (xw + xe) / 2, zN);
+      for (const [z, nz] of [[zN, 1], [zS, -1]]) batch.add(PM.tile, L.wallQuad((xw + xe) / 2, (h + 0.15) / 2, z, 0, nz, xe - xw, h - 0.15, 0.02, tileUV(xe - xw, h - 0.15)), (xw + xe) / 2, z);
+      for (const [z, nz] of [[zN, 1], [zS, -1]]) batch.add(M.darkMetal, L.boxAt((xw + xe) / 2, 0.24, z + nz * 0.04, xe - xw, 0.18, 0.04, 0, false), (xw + xe) / 2, z);   // skirting
+      for (const [p, q] of [[A, SP.An], [B, SP.G0], [SP.G1, SP.Bs], [SP.Bs, [xe, zS]]]) {                              // (and along the eastern leg)
+        const len = Math.hypot(q[0] - p[0], q[1] - p[1]), tx = (q[0] - p[0]) / len, tz = (q[1] - p[1]) / len, mx = (p[0] + q[0]) / 2, mz = (p[1] + q[1]) / 2;
+        const [nx, nz] = L.pointInPoly(mx + tz * 0.5, mz - tx * 0.5, SP.poly) ? [tz, -tx] : [-tz, tx];
+        batch.add(M.darkMetal, L.boxAt(mx + nx * 0.04, 0.24, mz + nz * 0.04, len, 0.18, 0.04, Math.atan2(-tz, tx), false), mx, mz);
+      }
+      // the viaduct's portal-frame piers that stand in the passage (rail.js: every 18 m, 3 m in from the deck edges)
+      // get a tiled casing and a collider to match
+      const jr = CITY.rail && CITY.rail.jr;
+      if (jr) for (const p of L.alongPolyline(L.resample(jr.path, 6), 18, 6)) for (const lat of [-jr.width / 2 + 3, jr.width / 2 - 3]) {
+        const x = p.x - p.dz * lat, z = p.z + p.dx * lat, r = Math.atan2(-p.dz, p.dx);
+        if (Math.abs(z - (zN + zS) / 2) > 30 || Math.abs(x - (xw + xe) / 2) > 70) continue;
+        const hit = [[0, 0], [1.3, 0], [-1.3, 0], [0, 1.3], [0, -1.3]].some(([u, v]) => L.pointInPoly(x + p.dx * u - p.dz * v, z + p.dz * u + p.dx * v, SP.poly));
+        if (!hit) continue;
+        batch.add(PM.tile, L.boxAt(x, 0.15 + (h - 0.15) / 2, z, 2.1, h - 0.15, 2.1, r, true), x, z);
+        batch.add(M.darkMetal, L.boxAt(x, 0.25, z, 2.14, 0.2, 2.14, r, false), x, z);
+        colliders.push(S.boxCollider(x, z, 2.1, h, 2.1, r));
+      }
+      // ---- lights: strip battens in two rows along each leg, a few real fixtures
+      for (let x = xw + 1.2; x < xe - 0.4; x += 2.4) for (const z of [zN + 2.3, zS - 2.3]) S.ibox(inst, 'lm_passLight', PM.light, x, h - 0.07, z, 1.6, 0.05, 0.16);
+      for (let s = 1.2; s < SP.sS; s += 2.4) for (const nn of [2.3, ow - 2.3]) { const [x, z] = at(s, nn); if (x > xe + 0.8 && L.pointInPoly(x, z, SP.poly)) S.ibox(inst, 'lm_passLight', PM.light, x, h - 0.07, z, 1.6, 0.05, 0.16, rot); }
+      for (let x = xw + 3.5; x < xe; x += 9) fixture(x, h - 0.25, (zN + zS) / 2, 0xf2f5ff, 22, 10);
+      for (const s of [3.5, 11.5]) { const [x, z] = at(s, ow / 2); fixture(x, h - 0.25, z, 0xf2f5ff, 24, 11); }
+      // ---- the 南改札: header band over the gate line (name board, 発車標, 運賃表), the gates, the attendant window,
+      //      the paid concourse behind (stair + escalators up to the platforms painted on its back wall)
+      {
+        const gw = G.s1 - G.s0, sm = (G.s0 + G.s1) / 2, gn = -1.4, RH = 3.3, BH = gw * 1.5 / 17.4;   // band keeps the canvas aspect
+        const gm = L.signMaterial(gateCanvas2('南改札', 'South Gate'), { emissive: 0.5, roughness: 0.55 });
+        const [hx, hz] = at(sm, 0), [hx2, hz2] = at(sm, -0.15);
+        batch.add(M.whiteMetal, L.boxAt(hx2, h - BH / 2, hz2, gw, BH, 0.3, rot, false), hx, hz);                        // header box
+        batch.add(gm, L.wallQuad(hx, h - BH / 2, hz, N[0], N[1], gw, BH, 0.03, [0, 0, 1, 1 / 3]), hx, hz);
+        const [bx, bz] = at(sm, -G.depth), uMax = Math.min(1, gw / ((RH - 0.15) / 3.6) / 17.4);
+        batch.add(gm, L.wallQuad(bx, 0.15 + (RH - 0.15) / 2, bz, N[0], N[1], gw, RH - 0.15, 0.06, [0, 1 / 3, uMax, 1]), bx, bz);   // paid concourse back wall
+        batch.add(PM.floor, L.polygonCap(SP.notch, 0.17, 0.5), hx, hz);
+        batch.add(PM.ceil, L.extrudePolygon(SP.notch, RH, RH + 0.02, { cap: false, bottom: true, sides: false }), hx, hz);
+        for (let s = G.s0 + 1.2; s < G.s1 - 0.5; s += 2.2) for (const nn of [-3.2, -5.4]) { const [x, z] = at(s, nn); S.ibox(inst, 'lm_passLight', PM.light, x, RH - 0.07, z, 1.6, 0.05, 0.16, rot); }
+        { const [x, z] = at(sm, -3.5); fixture(x, RH - 0.25, z, 0xf4f6ff, 18, 9); }
+        // IC gates (cabinets along the line, long axis across it = the walk), entry lanes green, exit lanes blue
+        if (!gateMat) { gateMat = L.std({ vertexColors: true, roughness: 0.45, metalness: 0.2, emissive: 0x000000 }); gateMat.name = 'lm_icGate'; }
+        const col = (g, hex) => { const c = new THREE.Color(hex), nv = g.attributes.position.count, a = new Float32Array(nv * 3); for (let i = 0; i < nv; i++) { a[i * 3] = c.r; a[i * 3 + 1] = c.g; a[i * 3 + 2] = c.b; } g.setAttribute('color', new THREE.BufferAttribute(a, 3)); return g; };
+        const piece = (s, nn, y, w, hh, d, hex) => { const [x, z] = at(s, nn); batch.add(gateMat, col(L.boxAt(x, y, z, w, hh, d, rot, false), hex), x, z); };
+        const s0g = G.s0 + 1.1, s1g = G.s1 - 2.3, pitch = 0.9;
+        let k = 0;
+        for (let s = s0g; s <= s1g + 1e-6; s += pitch, k++) {
+          piece(s, gn, 0.15 + 0.5, 0.22, 1.0, 1.3, 0xc4c8cc);
+          piece(s, gn, 0.15 + 1.02, 0.24, 0.05, 1.32, k < 5 ? 0x1d8f3e : 0x2b6bd6);
+          for (const e of [1, -1]) { piece(s, gn + e * 0.4, 0.15 + 1.06, 0.18, 0.03, 0.26, 0x2b6bd6); piece(s, gn + e * 0.67, 0.15 + 0.85, 0.2, 0.16, 0.04, 0x101418); }   // IC readers + displays, both ends
+          if (s + pitch <= s1g + 1e-6) for (const e of [-1, 1]) piece(s + pitch / 2 + e * 0.17, gn, 0.15 + 0.62, 0.3, 0.36, 0.05, 0xe8742a);   // flaps
+        }
+        piece(G.s0 + 0.2, gn, 0.15 + 0.5, 0.1, 1.0, 1.3, 0xb8bcc0);                                                    // wide-gate fence post
+        // 有人改札 / のりこし精算 window at the west end
+        { const sL = s0g + Math.floor((s1g - s0g) / pitch + 1e-6) * pitch + 0.15, w = G.s1 - 0.05 - sL, s = sL + w / 2, [x, z] = at(s, gn), [sx, sz] = at(s, gn + 0.82);
+          batch.add(M.whiteMetal, L.boxAt(x, 0.15 + 0.55, z, w, 1.1, 1.6, rot, false), x, z);
+          batch.add(M.glassClear, L.boxAt(x, 0.15 + 1.75, z, w, 1.3, 1.6, rot, false), x, z);
+          batch.add(M.interior, L.boxAt(x, 0.15 + 1.75, z, w - 0.3, 1.1, 1.2, rot, false), x, z);
+          batch.add(M.whiteMetal, L.boxAt(x, 0.15 + 2.45, z, w + 0.1, 0.1, 1.7, rot, false), x, z);
+          S.signQuad(batch, sx, 2.25, sz, N[0], N[1], { text: '窓口', sub: 'のりこし精算 ・ Staff', w: Math.min(1.6, w), h: 0.4, bg: '#ffffff', fg: '#1d8f3e', emissive: 0.45, weight: '800', lift: 0.03 }); }
+        { const [x, z] = at(sm, gn); colliders.push(S.boxCollider(x, z, gw, 1.4, 1.4, rot)); }                         // the gate line (paid side closed)
+      }
+      // ---- signs (JP green for the line / gate, yellow for the exits). Hanging ones are two single-sided prints back
+      //      to back on a thin core, so each face can point its own way.
+      const hang = (x, z, y, nx, nz, w, hh, front, back) => {
+        const r = Math.atan2(nx, nz);
+        batch.add(M.darkMetal, L.boxAt(x, y, z, w + 0.08, hh + 0.08, 0.03, r, false), x, z);
+        for (const e of [-1, 1]) batch.add(M.darkMetal, L.boxAt(x + nz * e * (w / 2 - 0.3), (y + hh / 2 + h) / 2, z - nx * e * (w / 2 - 0.3), 0.04, h - y - hh / 2, 0.04, r, false), x, z);   // hangers
+        S.signQuad(batch, x, y, z, nx, nz, { w, h: hh, emissive: 0.45, weight: '800', lift: 0.035, ...front });
+        S.signQuad(batch, x, y, z, -nx, -nz, { w, h: hh, emissive: 0.45, weight: '800', lift: 0.035, ...(back || front) });
+      };
+      const JP = { bg: '#1d8f3e', fg: '#ffffff', weight: '900' }, EXIT = { bg: '#ffd400', fg: '#111111' };
+      // eastern leg (normal −I faces people walking in from 東口)
+      { const [x, z] = at(G.s0 + 0.9, 2.1);
+        hang(x, z, 2.95, -I[0], -I[1], 3.2, 0.62, { ...JP, text: 'JP線  南改札', sub: 'South Gate  ・  山手線 ・ 埼京線 ・ 湘南新宿ライン' }); }
+      { const [x, z] = at(3.2, ow - 2.9);
+        hang(x, z, 2.95, -I[0], -I[1], 4.6, 0.62, { ...EXIT, text: '西口 ・ 南口  ↑', sub: 'West Exit ・ South Exit  ―  西口バスのりば ・ マークシティ' },
+          { ...EXIT, text: '東口  ↑', sub: 'East Exit  ―  地下鉄 Metro / Tokyu ・ スクランブルスクエア' }); }
+      { const [x, z] = at((G.s0 + G.s1) / 2, ow);                                                                          // opposite the gates
+        S.signQuad(batch, x, 2.75, z, -N[0], -N[1], { ...EXIT, text: '← 西口 ・ 南口　　　東口 →', sub: 'West Exit ・ South Exit　　　　　East Exit', w: 6.2, h: 0.62, emissive: 0.45, weight: '800', lift: 0.05 }); }
+      { const [x, z] = at(G.s0 - 0.35, ow);
+        S.signQuad(batch, x, 1.75, z, -N[0], -N[1], { text: 'JP 渋谷町駅  構内図', sub: 'Station Map  ―  1F 南改札 ・ 東口 ・ 西口', w: 2.2, h: 1.5, bg: '#e8e4dc', fg: '#1d4a2a', emissive: 0.5, weight: '800', lift: 0.05 }); }
+      // western leg (normal +x faces people walking in from 西口... read westbound: normal +x)
+      const zc = (zN + zS) / 2;
+      hang(xe - 7, zc, 2.95, 1, 0, 5.4, 0.62, { ...EXIT, text: '西口 ・ 南口  ↑', sub: 'West Exit ・ South Exit  ―  西口バスのりば ・ モヤイ像 ・ フクラス' },
+        { ...EXIT, text: '東口 ・ 地下鉄  ↑', sub: 'East Exit ・ Metro / Tokyu Lines  ―  スクランブルスクエア' });
+      hang(xw + 7, zc, 2.95, 1, 0, 5.4, 0.62, { ...EXIT, text: '西口  ↑', sub: 'West Exit  ―  西口バスのりば ・ マークシティ ・ 京王井の頭線' },
+        { ...JP, text: 'JP線  南改札  ↑', sub: 'South Gate  ・  山手線 ・ 埼京線 ・ 湘南新宿ライン' });
+      // posters on the tiled walls, the ticket machines by the gate end of the south wall
+      for (const [x, z, nz, t, sub, bg] of [[xw + 13, zN, 1, 'SHIBUYA46', '純愛 ― 9.28 ON SALE', '#c8102e'], [xw + 24, zN, 1, 'TOJO COLA', '爽快、東城。', '#1a2a4a'], [xw + 35, zN, 1, 'STARBEANS', 'AUTUMN LATTE', '#0b3d2e'], [xw + 18.5, zS, -1, 'KARAOKE', 'カラオケ舘 ― 30分 ¥100', '#6a2a8a'], [xw + 29.5, zS, -1, 'Q-FRONT', 'TSUTAYU ― 新作レンタル', '#1a56b8']]) {
+        batch.add(M.darkMetal, L.boxAt(x, 1.9, z + nz * 0.03, 1.56, 2.16, 0.04, 0, false), x, z);
+        S.signQuad(batch, x, 1.9, z + nz * 0.05, 0, nz, { text: t, sub, w: 1.4, h: 2.0, bg, fg: '#ffffff', emissive: 0.45, weight: '900', lift: 0.02 });
+      }
+      for (let i = 0; i < 3; i++) {
+        const x = xe - 5.4 + i * 1.3;
+        batch.add(M.whiteMetal, L.boxAt(x, 0.15 + 0.9, zS - 0.32, 1.1, 1.8, 0.6, 0, false), x, zS);
+        batch.add(M.interior, L.wallQuad(x, 1.25, zS - 0.63, 0, -1, 0.8, 0.55, 0.01), x, zS);
+        batch.add(M.darkMetal, L.boxAt(x, 0.95, zS - 0.7, 0.9, 0.06, 0.2, 0, false), x, zS);
+      }
+      colliders.push(S.boxCollider(xe - 4.1, zS - 0.32, 4.0, 1.9, 0.7));
+      S.signQuad(batch, xe - 4.1, 2.45, zS - 0.02, 0, -1, { text: 'きっぷうりば', sub: 'Tickets  ・  Suica チャージ  ・  のりこし精算', w: 4.0, h: 0.5, bg: '#2b6bd6', fg: '#ffffff', emissive: 0.5, weight: '800', lift: 0.05 });
+      // ---- the 西口 mouth on the 東急 frontage (under its canopy) and the 東口 sign over the east opening
+      S.signQuad(batch, xw, h + 0.5, zc, -1, 0, { ...JP, text: 'JP 渋谷町駅  西口', sub: '南改札 South Gate  ・  東西自由通路  ・  東口 East Exit', w: 7.4, h: 0.78, emissive: 0.45, lift: 0.05 });
+      {
+        const mx = (A[0] + B[0]) / 2, mz = (A[1] + B[1]) / 2;
+        S.signQuad(batch, mx - I[0] * 0.08, HH - 0.55, mz - I[1] * 0.08, -I[0], -I[1], { text: 'JP 渋谷町駅  東口', sub: '南改札 South Gate  ・  西口 West Exit  ・  山手線 ・ 埼京線 ・ 湘南新宿ライン', w: Math.min(ow, 9), h: 0.95, bg: '#1d8f3e', fg: '#ffffff', emissive: 0.4, weight: '900' });
+      }
+    }
+    // the subway escalators in front of 東口 (CITY.groundHoles 'higashiguchi'), with their board
+    const hole = (CITY.groundHoles || []).find((hh) => hh.id === 'higashiguchi');
+    if (hole) {
+      well(batch, inst, hole, colliders, { title: '東京メトロ 半蔵門線 ・ 副都心線  東急東横線 ・ 田園都市線', sub: '地下鉄のりば  B2F  Subway Lines ↓', escalators: true });
+      const hx = (hole.x0 + hole.x1) / 2;
+      S.signQuad(batch, hx, 2.6, hole.z0 - 0.05, 0, -1, { text: '地下鉄 のりかえ ↓', sub: 'Metro ・ Tokyu Lines', w: 4.2, h: 0.6, bg: '#ffd400', fg: '#111111', emissive: 0.4, weight: '800', double: true });
+      batch.add(M.darkMetal, L.boxAt(hx - 2.2, 1.35, hole.z0 - 0.1, 0.08, 2.4, 0.08, 0, false), hx, hole.z0);
+      batch.add(M.darkMetal, L.boxAt(hx + 2.2, 1.35, hole.z0 - 0.1, 0.08, 2.4, 0.08, 0, false), hx, hole.z0);
     }
   }
   // ---- roof plant on the west building
@@ -440,12 +608,15 @@ export function build({ key, data, batch, inst, group, rng, world, pools, engine
   inst.add('antenna', At.geos.antenna, At.metal, px - 14, H, pz + 40, 0);
   // ---- colliders
   colliders.push(S.boxCollider((x0 + gx) / 2, (zw + gz0) / 2, gx - x0, H, gz0 - zw));
-  colliders.push(S.boxCollider((x0 + gx) / 2, (gz1 + z1) / 2, gx - x0, H, z1 - gz1));
+  for (const [za, zb] of cutZ(gz1, z1)) colliders.push(S.boxCollider((x0 + gx) / 2, (za + zb) / 2, gx - x0, H, zb - za));
+  if (SP) colliders.push(S.boxCollider((x0 + gx) / 2, (SP.zN + SP.zS) / 2, gx - x0, H - SP.h, SP.zS - SP.zN, 0, SP.h));   // over the 西口 mouth
   colliders.push(S.boxCollider(x0 + rd + (gx - x0 - rd) / 2, (gz0 + PAS.z0) / 2, gx - x0 - rd, H, PAS.z0 - gz0));   // either side of the passage mouth
   colliders.push(S.boxCollider(x0 + rd + (gx - x0 - rd) / 2, (PAS.z1 + gz1) / 2, gx - x0 - rd, H, gz1 - PAS.z1));
-  colliders.push(S.boxCollider((gx + GATE.x0) / 2, (PAS.z1 + z1) / 2, GATE.x0 - gx, UH, z1 - PAS.z1));              // south block around the gate recess
-  colliders.push(S.boxCollider((GATE.x1 + x1) / 2, (PAS.z1 + z1) / 2, x1 - GATE.x1, UH, z1 - PAS.z1));
-  colliders.push(S.boxCollider((GATE.x0 + GATE.x1) / 2, (GATE.z1 + z1) / 2, GATE.x1 - GATE.x0, UH, z1 - GATE.z1));
+  for (const [za, zb] of cutZ(PAS.z1, z1)) {                                                                           // south block around the gate recess
+    colliders.push(S.boxCollider((gx + GATE.x0) / 2, (za + zb) / 2, GATE.x0 - gx, UH, zb - za));
+    colliders.push(S.boxCollider((GATE.x1 + x1) / 2, (za + zb) / 2, x1 - GATE.x1, UH, zb - za));
+  }
+  for (const [za, zb] of cutZ(GATE.z1, z1)) colliders.push(S.boxCollider((GATE.x0 + GATE.x1) / 2, (za + zb) / 2, GATE.x1 - GATE.x0, UH, zb - za));
   facades.push(...S.facadeRecords(key, wb, H, 3, { tenants: ['JP 渋谷町駅'], gf: 6.5 }));
   const lv = (x, y, z) => new THREE.Vector3(x - px, y, z - pz);
   const anchors = { sign: lv(x0 - 0.5, 9.6, (gz0 + gz1) / 2), signNormal: new THREE.Vector3(-1, 0, 0), gate: lv(x0, 0, (gz0 + gz1) / 2), gateNormal: new THREE.Vector3(-1, 0, 0), gateWidth: gz1 - gz0, mosaic: lv(x0 - 0.1, 3.6, gz1 + 34), passage: lv(x1, 0, (PAS.z0 + PAS.z1) / 2) };

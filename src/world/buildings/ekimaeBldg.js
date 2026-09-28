@@ -1,8 +1,10 @@
-// [city] 渋谷駅前ビル — 9-storey white-panel block (red window frames, Street View 2023-09) on the south-west corner (道玄坂 × 駅前通り) carrying two stacked LED
+// [city] 渋谷駅前ビル — 9-storey white-panel block (red window frames set 0.28 m deep between real piers and sills,
+// relief.js curtainGrid; Street View 2023-09) on the south-west corner (道玄坂 × 駅前通り) carrying two stacked LED
 // screens on its north-east corner aimed at the crossing (screens from the signage module via anchors.screens).
 import * as THREE from 'three';
 import * as L from './lib.js';
 import * as S from './shared.js';
+import * as R from './relief.js';
 import { getAtlases, tenantType, SHOP_OF_TYPE } from './genericBuilding.js';
 
 export const KEYS = ['ekimaeBldg'];
@@ -17,7 +19,8 @@ export function build({ key, data, batch, inst, group, rng, pools, isStreetSide 
   S.prism(batch, M.panelRedFrame, poly, 0, H, { uvScale: 3.5 / SH });
   S.rings(batch, M.whiteMetal, poly, GF, H - 0.5, SH, { out: 0.18, h: 0.28 });
   S.parapet(batch, M.whiteMetal, poly, H, { h: 1.0, t: 0.3 });
-  S.fins(inst, 'lm_finWhite', M.whiteMetal, poly, GF, H, 3.2, { w: 0.18, d: 0.35 });
+  // real white piers and sill bands on the painted window grid: each red-framed window sits 0.28 m deep in the wall
+  for (const F of R.faces(poly, 5)) R.curtainGrid(batch, F, M.whiteMetal, { curtain: M.panelRedFrame.userData.curtain, uvScale: 3.5 / SH, uStart: R.perimeterAt(poly, F.i), y0: GF + 0.3, y1: H, d: 0.28 });
   // the 西口 (east) face: a green planted sign band at 2F, the contact-lens banner down the corner, clinic boards
   const ef = L.bestEdge(poly, 1, 0.1);
   if (ef) {

@@ -14,7 +14,7 @@ export function buildShinsenSurroundings(engine,root,box,sign,m,concourse){
  const beam=(a,b,w,h,material)=>{const d=new THREE.Vector3().subVectors(new THREE.Vector3(...b),new THREE.Vector3(...a));const mesh=new THREE.Mesh(new THREE.BoxGeometry(w,h,d.length()),material);mesh.position.set((a[0]+b[0])/2,(a[1]+b[1])/2,(a[2]+b[2])/2);mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,0,1),d.normalize());mesh.castShadow=mesh.receiveShadow=true;root.add(mesh);return mesh;};
  // Replace the generic tiled ground beneath the station with its lower rail level.
  box(-612,y-.22,249,68,.4,18,ballast);
- for(let x=-646;x< -578;x++)for(const z of [240,258]){const top=Math.max(y,groundY(x,z));box(x+.5,(top+y-.4)/2,z,1,top-y+.4,.12,concrete);}
+ for(let x=-646;x< -578;x++)for(const z of [240,258]){if(x>=-606&&x< -598)continue;const top=Math.max(y,groundY(x,z));box(x+.5,(top+y-.4)/2,z,1,top-y+.4,.12,concrete);}   // no wall across the road at the crossing
 
  for(let x=-646;x< -607;x++){
   const z=mid(x);
@@ -80,15 +80,39 @@ export function buildShinsenSurroundings(engine,root,box,sign,m,concourse){
  for(const dz of [-2.5,2.5])beam([-646,y+5.6,mid(-646)+dz],[-581,y+5.6,mid(-581)+dz],.025,.025,dark);
  for(const z of [238.5,254.5])box(-594,y+.9,z,1.1,1.8,.6,concrete,true);
  // North entrance stairs join the upper concourse. The solid risers remove the floating underside.
- for(let i=0;i<22;i++){const z=230+i*.55,top=groundY(-623,230)+(concourse-groundY(-623,230))*(i+1)/22;box(-623,(top+y-1)/2,z,3.3,top-y+1,.56,tile);}
+ const g230=groundY(-623,230),tread=i=>g230+(concourse-g230)*Math.min(22,i+1)/22;
+ for(let i=0;i<22;i++){const z=230+i*.55,top=tread(i);box(-623,(top+y-1)/2,z,3.3,top-y+1,.56,tile);}
+ // its cheek walls over the cutting (z 238 → the concourse's north wall), so the stair has no open side onto the tracks
+ for(const x of [-624.85,-621.15]){
+  for(let i=14;i<22;i++){const z=230+i*.55,top=tread(i)+1,bot=y-.3;box(x,(top+bot)/2,z,.2,top-bot,.56,tile);}
+  engine.world.addStatic(new THREE.Box3(new THREE.Vector3(x-.1,y-2,237.4),new THREE.Vector3(x+.1,concourse+3,244.8)),{tag:'station'});
+ }
  box(-623,concourse-.12,243.8,3.3,.24,4.4,tile);
  sign('神泉駅 北口',-623,concourse+2.4,238,4,.65,0,-1,'Inokashira Line');
  for(const side of [-1,1])beam([-623+side*1.7,groundY(-623,230)+1,230],[-623+side*1.7,concourse+1,242],.07,.07,silver);
  // Ground and visible crossing share the same level. Leave the road joins outside the cutout unchanged.
  const old=engine.world.groundBase;
  engine.world.groundBase=(x,z)=>{
-  if(x>-606&&x< -598&&z>=237&&z<=257)return y+.12-(engine.world.groundSlab?.(x,z)||0);
-  if(x>=-624.65&&x<=-621.35&&z>=230&&z<=246){const t=Math.min(1,(z-230)/12);return groundY(-623,230)*(1-t)+concourse*t-(engine.world.groundSlab?.(x,z)||0);}
+  // the crossing deck inside the cutting; outside it the road keeps its own (terrain) level
+  if(x>-606&&x< -598&&z>=240&&z<=257.2)return y+.12-(engine.world.groundSlab?.(x,z)||0);
+  // stair: the contact surface is the tread top under the foot (it was a smooth ramp half a tread low)
+  if(x>=-624.65&&x<=-621.35&&z>=229.725&&z<=246){const i=Math.floor((z-229.725)/.55);return (i>=21?concourse:tread(i))-(engine.world.groundSlab?.(x,z)||0);}
   return old(x,z);
  };
+ // The cutting is out of bounds, as at the real crossing: the retaining walls along both sides, both ends, and a
+ // fence with a 立入禁止 plate on each side of the crossing deck, leaving only the road across the tracks.
+ const block=(x0,z0,x1,z1)=>engine.world.addStatic(new THREE.Box3(new THREE.Vector3(x0,y-2,z0),new THREE.Vector3(x1,y+40,z1)),{tag:'station'});
+ // (gaps where the two station stairs cross the walls; their cheeks close the sides)
+ block(-646.2,239.75,-624.95,240.25);block(-621.05,239.75,-606,240.25);block(-598.8,239.75,-577.8,240.25);
+ block(-646.2,257.75,-631.8,258.25);block(-628.2,257.75,-604.9,258.25);block(-597.6,257.75,-577.8,258.25);
+ block(-627.6,244.5,-624.95,244.9);   // the concourse's north-wall opening beside the stair head
+ block(-646.4,240,-646,244.9);block(-646.4,255.1,-646,258);block(-578.2,240,-577.8,258);
+ const fenceMat=mat(0x9a9c98);fenceMat.metalness=.6;fenceMat.roughness=.4;
+ for(const side of [-1,1]){
+  const fx=z=>-602+(z-247)*.07+side*3.75;
+  for(let z=240.2;z<257.8;z+=1.6){box(fx(z),y+.6,z,.08,1.2,.08,fenceMat);}
+  for(const h of [.35,.8,1.18])beam([fx(240.2),y+h,240.2],[fx(257.8),y+h,257.8],.05,.05,fenceMat);
+  for(let z=240.2;z<257.8;z+=1.1)block(fx(z)-.2,z,fx(z)+.2,z+1.1);
+  sign('立入禁止',fx(247)+side*.06,y+1.35,247,1.1,.34,side,0,'NO ENTRY');
+ }
 }

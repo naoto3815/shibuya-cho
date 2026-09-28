@@ -9,10 +9,16 @@
 import * as THREE from 'three';
 import * as L from './lib.js';
 import * as S from './shared.js';
+import { escalator, stair } from './escalator.js';
+import { SW_H } from './streets.js';
 
 export const BRIDGE = { x0: -52, x1: -1.5, z0: 63, z1: 81 };   // plan rectangle of the glazed bridge
 export const LOW_DECK = { z1: 93 };                             // the low deck continues south of the bridge to here
 export const Y = { under: 6.2, floor: 7.0, band: 8.2, mid: 11.4, top: 15.8, roof: 16.6 };
+// the stair + up escalator from the bus-terminal pavement along Mark City's east face up to the deck (2F), where the
+// deck leads north to the 井の頭線 中央口 in Mark City EAST 2F. Rises northward from the foot (z 99) to the deck
+// edge (z 86); the deck is cut open over it (z 86–92), a 1 m edge beam carrying the sign stays at z 92–93.
+export const UP = { x0: -47.0, x1: -42.3, zTop: 86, zFoot: 99, zOpen: 92, stairX: -45.5, stairW: 3.0, escX: -43.05 };
 const DECK_B = [[-19, 86], [-17.5, 100], [-13.5, 114], [-6, 125.5], [6, 130.5], [27, 131]];
 const DECK_B_W = 9;
 
@@ -68,16 +74,51 @@ export function buildWestDeck({ CITY, batch, inst, group, field }) {
 
   // ---- low slatted ceiling under the bridge and the low deck, square downlights on a 6 m grid
   const dz1 = LOW_DECK.z1, dcz = (z0 + dz1) / 2, dD = dz1 - z0;
-  const ceil = new THREE.PlaneGeometry(W, dD); ceil.rotateX(Math.PI / 2); ceil.translate(cx, Y.under, dcz);
-  const uv = ceil.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * W / 4, uv.getY(i) * dD / 4);
-  batch.add(ceiling(), ceil, cx, dcz);
-  for (let x = x0 + 3; x < x1 - 1; x += 6) for (let z = z0 + 3; z < dz1 - 1; z += 6) S.ibox(inst, 'lm_deckLight', M.glowWhite, x, Y.under - 0.04, z, 1.2, 0.06, 1.2);
-  // low deck slab south of the bridge: grey fascia, stone floor, white parapet on its open south edge
+  // hung 6 cm below the slab soffit and the lights 8 cm below that: coplanar faces z-fought into a flickering mosaic
+  const ceilY = Y.under - 0.06;
+  const inOpen = (x, z, m = 0) => x < UP.x1 + m && z > UP.zTop - m && z < UP.zOpen + m;   // the stair opening (west part is inside Mark City)
+  const ceilRect = (ax, az, bx, bz) => {
+    const w = bx - ax, d = bz - az, g = new THREE.PlaneGeometry(w, d); g.rotateX(Math.PI / 2); g.translate((ax + bx) / 2, ceilY, (az + bz) / 2);
+    const uv = g.attributes.uv; for (let i = 0; i < uv.count; i++) uv.setXY(i, (ax + uv.getX(i) * w) / 4, (az + uv.getY(i) * d) / 4);
+    batch.add(ceiling(), g, (ax + bx) / 2, (az + bz) / 2);
+  };
+  ceilRect(x0, z0, x1, UP.zTop); ceilRect(UP.x1, UP.zTop, x1, UP.zOpen); ceilRect(x0, UP.zOpen, x1, dz1);
+  for (let x = x0 + 3; x < x1 - 1; x += 6) for (let z = z0 + 3; z < dz1 - 1; z += 6) if (!inOpen(x, z, 0.8)) S.ibox(inst, 'lm_deckLight', M.glowWhite, x, ceilY - 0.1, z, 1.2, 0.09, 1.2);
+  // low deck slab south of the bridge: grey fascia, stone floor, white parapet on its open south edge; the stair
+  // opening leaves a north strip (z 81–86), the east part and the 1 m edge beam (z 92–93)
   const ldz = (z1 + dz1) / 2, ldD = dz1 - z1;
-  batch.add(M.ledge, L.boxAt(cx, (Y.under + Y.floor) / 2, ldz, W, Y.floor - Y.under, ldD, 0, false), cx, ldz);
-  batch.add(M.stoneLight, L.boxAt(cx, Y.floor + 0.02, ldz, W - 0.2, 0.04, ldD - 0.2, 0, false), cx, ldz);
+  const slab = (ax, az, bx, bz) => {
+    const mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    batch.add(M.ledge, L.boxAt(mx, (Y.under + Y.floor) / 2, mz, bx - ax, Y.floor - Y.under, bz - az, 0, false), mx, mz);
+    batch.add(M.stoneLight, L.boxAt(mx, Y.floor + 0.02, mz, bx - ax - 0.2, 0.04, bz - az - 0.2, 0, false), mx, mz);
+  };
+  slab(x0, z1, x1, UP.zTop); slab(UP.x1, UP.zTop, x1, UP.zOpen); slab(x0, UP.zOpen, x1, dz1);
   batch.add(M.whiteMetal, L.boxAt(cx, Y.floor + 0.6, dz1 - 0.1, W, 1.2, 0.2, 0, false), cx, ldz);
   batch.add(M.whiteMetal, L.boxAt(x1 - 0.1, Y.floor + 0.6, ldz, 0.2, 1.2, ldD, 0, false), cx, ldz);
+  // glass balustrade round the opening on the deck (east side and the edge beam); the stair head (north) stays open
+  for (const [ax, az, bx, bz] of [[UP.x1 + 0.1, UP.zTop + 0.6, UP.x1 + 0.1, UP.zOpen + 0.1], [x0 + 2, UP.zOpen + 0.1, UP.x1 + 0.1, UP.zOpen + 0.1]]) {
+    const l = Math.hypot(bx - ax, bz - az), r = Math.atan2(-(bz - az), bx - ax), mx = (ax + bx) / 2, mz = (az + bz) / 2;
+    batch.add(M.glassClear, L.boxAt(mx, Y.floor + 0.6, mz, l, 1.0, 0.04, r, false), mx, mz);
+    batch.add(M.darkMetal, L.boxAt(mx, Y.floor + 0.08, mz, l, 0.16, 0.14, r, false), mx, mz);
+    batch.add(M.silver, L.boxAt(mx, Y.floor + 1.13, mz, l, 0.05, 0.08, r, false), mx, mz);
+  }
+  // the stair (west) and the up escalator (east) from the pavement to the deck, a cheek wall against Mark City
+  stair(batch, UP.stairX, SW_H, UP.zFoot, UP.stairX, Y.floor, UP.zTop, { w: UP.stairW, mat: M.stoneLight });
+  escalator(batch, inst, UP.escX, SW_H, UP.zFoot, UP.escX, Y.floor, UP.zTop, { w: 1.0, up: true, colliders });
+  for (let z = UP.zTop; z < UP.zFoot; z += 0.5) {
+    const t = Math.min(1, (UP.zFoot - z - 0.25) / (UP.zFoot - UP.zTop)), top = SW_H + (Y.floor - SW_H) * t + 1.0;
+    batch.add(M.ledge, L.boxAt(UP.x0 - 0.12, top / 2, z + 0.25, 0.24, top, 0.5, 0, false), UP.x0, z);
+  }
+  for (let z = UP.zTop; z < UP.zFoot - 0.4; z += 0.5) {                                                   // stair handrails
+    const t = Math.min(1, (UP.zFoot - z - 0.25) / (UP.zFoot - UP.zTop)), y = SW_H + (Y.floor - SW_H) * t;
+    S.ibox(inst, 'lm_stairRail', M.silver, UP.stairX + UP.stairW / 2 - 0.1, y + 0.85, z + 0.25, 0.06, 0.05, 0.52);
+  }
+  // nobody walks up (the deck is scenery): one box over the flight, the ride button waits at the foot (shinsen.js)
+  colliders.push(S.boxCollider(UP.stairX, (UP.zTop + UP.zFoot - 0.6) / 2, UP.stairW + 0.4, Y.floor + 1.2, UP.zFoot - 0.6 - UP.zTop, 0, -0.5));
+  // signs: on the edge beam over the foot, and a blue station pylon beside the escalator foot
+  S.flatSign(group, (UP.x0 + UP.x1) / 2, (Y.under + Y.floor) / 2, UP.zOpen + 1.08, 0, 1, { text: '京王井の頭線  渋谷町駅  中央口  2F  ↑', sub: 'KEIO INOKASHIRA LINE  ・  IN01  ・  渋谷マークシティ', w: 7.8, h: 0.72, bg: '#f4f4f0', fg: '#1b3a7a', emissive: 0.9, weight: '800' });
+  batch.add(M.darkMetal, L.boxAt(UP.x1 + 0.9, 1.3, UP.zFoot + 0.6, 0.12, 2.6, 0.12, 0, false), UP.x1, UP.zFoot);
+  S.flatSign(group, UP.x1 + 0.9, 2.35, UP.zFoot + 0.68, 0, 1, { text: '井の頭線 のりば ↑', sub: '神泉 ・ 下北沢 ・ 吉祥寺 方面', w: 1.6, h: 0.62, bg: '#1b3a7a', fg: '#ffffff', emissive: 0.9, weight: '800', double: true });
 
   // ---- the glazed bridge: slab, white fascia band to rail height, two storeys of clear glass on white fins
   batch.add(M.ledge, L.boxAt(cx, (Y.under + Y.floor) / 2, cz, W, Y.floor - Y.under, D, 0, false), cx, cz);
@@ -98,7 +139,7 @@ export function buildWestDeck({ CITY, batch, inst, group, field }) {
   batch.add(M.ledge, L.boxAt(cx, Y.mid, cz, W - 0.3, 0.3, D - 0.3, 0, false), cx, cz);
   batch.add(M.interiorDim, L.boxAt(cx, Y.mid - 0.2, cz, W - 0.5, 0.05, D - 0.5, 0, false), cx, cz);
   batch.add(M.interiorDim, L.boxAt(cx, Y.top - 0.2, cz, W - 0.5, 0.05, D - 0.5, 0, false), cx, cz);
-  for (let x = x0 + 2; x < x1 - 1; x += 3) for (const y of [Y.mid - 0.25, Y.top - 0.25]) S.ibox(inst, 'lm_stripLight', M.glowWhite, x, y, cz, 0.2, 0.05, D - 3);
+  for (let x = x0 + 2; x < x1 - 1; x += 3) for (const y of [Y.mid - 0.33, Y.top - 0.33]) S.ibox(inst, 'lm_stripLight', M.glowWhite, x, y, cz, 0.2, 0.05, D - 3);
   batch.add(core(), L.boxAt(cx, (Y.floor + Y.top) / 2, cz + 3, W - 10, Y.top - Y.floor - 0.6, D - 10, 0, false), cx, cz);   // shops / mural wall core
   for (let k = 0, x = x0 + 3; x < x1 - 2; x += 1.8 + L.hash(k, 1, 71) * 3, k++) {                    // commuters on both levels
     const lvl = L.hash(k, 4, 71) < 0.6 ? Y.floor : Y.mid + 0.15;
@@ -117,7 +158,8 @@ export function buildWestDeck({ CITY, batch, inst, group, field }) {
 
   // ---- columns: rows under the bridge's two faces and the low deck edge, only on foot surfaces
   for (const z of [z0 + 1.2, cz, z1 - 0.5, dz1 - 1.2]) for (let x = x0 + 4; x < x1 - 1; x += 1) {
-    if (!onFoot(x, z) || colliders.some(c => Math.hypot(c.obb.center.x - x, c.obb.center.z - z) < 6.5)) continue;
+    if (x < UP.x1 + 1.2 && z > UP.zTop - 1.5) continue;                                                   // clear of the stair
+    if (!onFoot(x, z) || colliders.some(c => c.obb.halfSize.x < 2 && Math.hypot(c.obb.center.x - x, c.obb.center.z - z) < 6.5)) continue;
     column(x, z, Y.under);
   }
 
@@ -155,4 +197,4 @@ export function buildWestDeck({ CITY, batch, inst, group, field }) {
   return { colliders };
 }
 
-export default { buildWestDeck, BRIDGE, Y };
+export default { buildWestDeck, BRIDGE, Y, UP };

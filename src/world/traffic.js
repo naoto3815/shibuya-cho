@@ -13,6 +13,8 @@
 //   Bodies are procedural: a lofted lower body with a rounded shoulder, a separate greenhouse whose glass is a
 //   material class inside the same loft (duplicated rings give crisp frames), bumpers, mirrors, sills, grille,
 //   canvas licence plates and emissive lamps on the BLOOM layer.
+//   The nearest buses (busPax) are drawn open: glass over a real saloon with the client's scanned people seated and
+//   strap-hanging in it (crowdScan statics, moved with the bus every frame); further out the saloon is an interior map.
 //
 //   traffic.phase   'ns'|'ns_amber'|'allred'|'scramble'|'ew'|'ew_amber'      traffic.phaseT seconds into it
 //   traffic.signal  { ns, ew, ped:'walk'|'flash'|'stop', vehicle, remaining }
@@ -22,6 +24,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { CITY, groundY } from './cityData.js';
+import { MOBILE, TIER } from '../core/mobileProfile.js';
 
 // ---------------------------------------------------------------------------------------------- signal cycle
 // (a 3 s amber, as on a 40–50 km/h road; the clearances are as short as the box allows, so each arm's red — 90 s from
@@ -62,6 +65,11 @@ const WH_NEAR = 34;      // a bus's or truck's wheels are pressed-steel discs in
 const GLARE_PULL = 12;
 const ENV_LAYER = 6;     // seen only by the night reflection capture (the shop-front band)
 const STAR_LEAK = 0.35;  // a headlamp behind somebody still twinkles between the heads at this strength
+// busPax: inside PAX_D (leaving past PAX_OUT, still inside D_SHADOW) the nearest PAX_BUSES buses are drawn open — real
+// glazing, a real saloon and the client's scanned people in it (lod1 inside PAX_MID, lod2 beyond); further out, and on
+// the phones' safe tier or ?busPax=0, the saloon stays the interior map. A phone carries one bus, fewer riders.
+const PAX_D = MOBILE ? 18 : 30, PAX_OUT = PAX_D + 3.5, PAX_BUSES = MOBILE ? 1 : 3, PAX_MID = MOBILE ? 5 : 7;
+const PAX_OCC = MOBILE ? 0.34 : 0.55;   // share of the seats taken
 
 // ---------------------------------------------------------------------------------------------- material kit
 // One patched MeshStandardMaterial covers paint, glass, chrome and rubber: aPaint mixes the per-instance colour
@@ -842,7 +850,10 @@ function jpnTaxiBody(P, lod = 0) {
 // A 日野ブルーリボン / いすゞエルガ-type city bus: slab sides straight up to a roof edge rolled on a 0.12 m radius, square
 // shouldered in plan, a flat upright windscreen in a black-masked face with the LED 方向幕 above it, two axles (twin
 // tyres on the rear one), tall combination lamps down the rear corners and the saloon lit through the rear window.
-function busBody(P, lod = 0) {
+// pax (near buses with passengers, busPax): the glazing is an opening instead of the interior map — the masks behind the
+// windscreen and the rear window become frames round them, the painted cab and back-row cut-outs are left out — and the
+// result is { body, glass }: the glazing's own triangles go to the see-through glass mesh.
+function busBody(P, lod = 0, pax = false) {
   const parts = [];
   const hw = P.hw, zF = P.zF, zB = P.zB;
   const rp = 0.22, R = 0.12, Y = 2.98;                        // plan corner radius, roof-edge radius, roof height
@@ -901,7 +912,13 @@ function busBody(P, lod = 0) {
   // across the flat of the face and round both corners, the upright windscreen proud of it. The lit dot-matrix face
   // of the 方向幕 is an instanced plane (destBoards) at P.destZ.
   const fw = (hw - rp) * 2;
-  parts.push(box(fw + 0.02, 1.86, 0.03, 0, 1.91, zF + 0.012, MAT.glossBlack));
+  if (pax) {
+    // round the windscreen (x ±(fw - 0.16) / 2, y 1.05-2.39): the lower bar up to the dash line, the sides, the 方向幕 band
+    const wx = (fw - 0.16) / 2, mx = (fw + 0.02) / 2;
+    parts.push(box(fw + 0.02, 0.42, 0.03, 0, 1.19, zF + 0.012, MAT.glossBlack));
+    parts.push(box(fw + 0.02, 0.45, 0.03, 0, 2.615, zF + 0.012, MAT.glossBlack));
+    for (const s of [-1, 1]) parts.push(box(mx - wx, 0.99, 0.03, s * (wx + mx) / 2, 1.895, zF + 0.012, MAT.glossBlack));
+  } else parts.push(box(fw + 0.02, 1.86, 0.03, 0, 1.91, zF + 0.012, MAT.glossBlack));
   for (const s of [-1, 1]) {
     for (const a of [Math.PI / 8, Math.PI * 3 / 8]) {
       const x = hw - rp + (rp + 0.012) * Math.sin(a), z = zF - rp + (rp + 0.012) * Math.cos(a);
@@ -913,7 +930,13 @@ function busBody(P, lod = 0) {
   // Rear: a black band across the top carrying the route-number box, the rear window under it (the saloon's ceiling
   // light through it), and the combination lamps' housings down both corners
   parts.push(box(fw + 0.02, 0.34, 0.03, 0, 2.62, zB - 0.012, MAT.glossBlack));
-  parts.push(box(fw - 0.10, 1.01, 0.03, 0, 1.905, zB - 0.012, MAT.glossBlack));
+  if (pax) {
+    // round the rear window (x ±(fw - 0.26) / 2, y 1.455-2.355)
+    const wx = (fw - 0.26) / 2, mx = (fw - 0.10) / 2;
+    parts.push(box(fw - 0.10, 0.055, 0.03, 0, 1.4275, zB - 0.012, MAT.glossBlack));
+    parts.push(box(fw - 0.10, 0.055, 0.03, 0, 2.3825, zB - 0.012, MAT.glossBlack));
+    for (const s of [-1, 1]) parts.push(box(mx - wx, 0.90, 0.03, s * (wx + mx) / 2, 1.905, zB - 0.012, MAT.glossBlack));
+  } else parts.push(box(fw - 0.10, 1.01, 0.03, 0, 1.905, zB - 0.012, MAT.glossBlack));
   parts.push(box(fw - 0.26, 0.90, 0.03, 0, 1.905, zB - 0.024, MAT.litglass));
   for (const s of [-1, 1]) parts.push(box(0.25, 0.64, 0.16, s * (hw - 0.155), 0.85, zB + 0.03, MAT.glossBlack));
   // the wheel wells: a curved roof (seen from inside) and an inner wall, dark
@@ -946,15 +969,16 @@ function busBody(P, lod = 0) {
     parts.push(box((hw - WD) * 2 - 0.04, 0.28, (P.axles[0] - P.axles[1]) + P.wheelR * 2.6, 0, P.wheelR + 0.24, (P.axles[0] + P.axles[1]) / 2, MAT.dark));
     return mergeGeometries(parts, false);
   }
-  // the saloon's passengers, seats and grab handles are drawn by the interior map in vehicleMaterial()
+  // the saloon's passengers, seats and grab handles are drawn by the interior map in vehicleMaterial() (and, on a pax
+  // body, by the real saloon mesh and the scanned passengers seen through the open glazing)
   // right-hand drive: the driver sits on the offside, local -x (local +x is the kerb side)
-  parts.push(box(0.46, 0.52, 0.016, -hw * 0.52, 1.60, zF + 0.052, MAT.sil));
-  parts.push(box(0.25, 0.25, 0.016, -hw * 0.52, 1.97, zF + 0.052, MAT.silskin));
-  parts.push(box(0.30, 0.30, 0.016, -hw * 0.52, 1.56, zF + 0.054, MAT.dark));            // steering wheel
+  if (!pax) parts.push(box(0.46, 0.52, 0.016, -hw * 0.52, 1.60, zF + 0.052, MAT.sil));
+  if (!pax) parts.push(box(0.25, 0.25, 0.016, -hw * 0.52, 1.97, zF + 0.052, MAT.silskin));
+  if (!pax) parts.push(box(0.30, 0.30, 0.016, -hw * 0.52, 1.56, zF + 0.054, MAT.dark));            // steering wheel
   // the back row seen through the rear window, dark against the saloon light, over the tops of the seat backs: two
   // sitters of different builds (one with his head on one side) and an empty seat, a strap-hanger further up the aisle
-  parts.push(box(fw - 0.30, 0.15, 0.012, 0, 1.62, zB - 0.046, { ...MAT.sil, col: 0x1c2233 }));
-  for (const [x, hy, r, w, tilt, dz] of [[-0.60, 2.04, 0.092, 0.40, 0.16, 0.042], [0.50, 2.08, 0.1, 0.44, -0.05, 0.042], [0.02, 2.13, 0.07, 0.26, 0.0, 0.040]]) {
+  if (!pax) parts.push(box(fw - 0.30, 0.15, 0.012, 0, 1.62, zB - 0.046, { ...MAT.sil, col: 0x1c2233 }));
+  if (!pax) for (const [x, hy, r, w, tilt, dz] of [[-0.60, 2.04, 0.092, 0.40, 0.16, 0.042], [0.50, 2.08, 0.1, 0.44, -0.05, 0.042], [0.02, 2.13, 0.07, 0.26, 0.0, 0.040]]) {
     const hd = new THREE.CircleGeometry(r, 12); hd.scale(1, 1.2, 1); hd.rotateZ(tilt); hd.rotateY(Math.PI); hd.translate(x + tilt * 0.12, hy, zB - dz);
     parts.push(tag(hd, MAT.sil));
     parts.push(box(r * 0.8, r * 1.2, 0.012, x, hy - r * 1.3, zB - dz, MAT.sil));             // neck
@@ -1006,6 +1030,116 @@ function busBody(P, lod = 0) {
   parts.push(box(hw * 1.36, 0.46, 0.03, 0, 0.93, zB - 0.02, MAT.dark));
   for (let i = 0; i < 5; i++) parts.push(box(hw * 1.30, 0.035, 0.05, 0, 0.75 + i * 0.09, zB - 0.035, MAT.silver));
   parts.push(box(hw * 1.76, 0.05, 0.16, 0, 0.27, zB + 0.02, MAT.rubber));
+  const g = mergeGeometries(parts, false);
+  return pax ? splitGlass(g, (zF - zB) / 2) : g;
+}
+
+// the glazing (the saloon's lit glass and the windscreen) out of a merged body, as its own index over the same vertices.
+// The shell's own glazing band across the flat of the nose and the tail (|z| = zEnd) goes: the windscreen and the rear
+// window are their own panes in front of it, and two tinted layers would darken the view in.
+function splitGlass(g, zEnd = 5.40) {
+  const em = g.attributes.aEmis.array, pz = g.attributes.position.array, idx = g.index.array, body = [], glass = [];
+  const isG = (v) => Math.abs(em[v] - MAT.litglass.emis) < 0.004 || Math.abs(em[v] - MAT.busglass.emis) < 0.004;
+  const end = (v) => Math.abs(Math.abs(pz[v * 3 + 2]) - zEnd) < 0.002;
+  for (let i = 0; i < idx.length; i += 3) {
+    const a = idx[i], b = idx[i + 1], c = idx[i + 2];
+    if (!(isG(a) && isG(b) && isG(c))) body.push(a, b, c);
+    else if (!(end(a) && end(b) && end(c))) glass.push(a, b, c);
+  }
+  const mk = (list) => {
+    const o = new THREE.BufferGeometry();
+    for (const k in g.attributes) o.setAttribute(k, g.attributes[k]);
+    o.setIndex(list); o.computeBoundingSphere();
+    return o;
+  };
+  return { body: mk(body), glass: mk(glass) };
+}
+
+// ------------------------------------------------------------------------------------------ the bus saloon (busPax)
+// What the open glazing of a near bus shows (bus local: +x the kerb side, +z forward, y up from the road): a low floor
+// ahead of the centre door and the raised rear half behind a step, the lit ceiling with its two LED strips, the grey
+// walls under the windows and over them, forward-facing blue moquette seats (singles down the front, 2 + 2 behind, the
+// back bench), orange grab poles, two ceiling rails with their straps over the front standing area, and the driver's
+// seat, wheel and dash behind the windscreen. The passengers are the client's scans, posed by traffic.writeMatrices into
+// crowdScan's statics. One merged mesh in the vehicle material; its surfaces are self-lit (aEmis) so the saloon glows
+// at night as the interior map did.
+const BUS_SAL = {
+  floorF: 0.40, floorR: 0.80, stepZ: -0.35, ceil: 2.50, railX: 0.30, railY: 2.36, ringY: 2.14,
+  // [x, z, seat surface y] facing forward
+  seats: [
+    [-0.80, 3.35, 1.10], [0.80, 3.35, 1.10], [-0.80, 2.50, 0.85], [0.80, 2.50, 0.85], [-0.80, 1.70, 0.85], [-0.80, 0.90, 0.85],
+    ...[-0.95, -1.75, -2.55, -3.35, -4.15].flatMap((z) => [-0.83, -0.40, 0.40, 0.83].map((x) => [x, z, 1.25])),
+    ...[-0.84, -0.42, 0, 0.42, 0.84].map((x) => [x, -4.92, 1.28]),
+  ],
+  driver: [-0.62, 4.52, 1.02],
+  // straps over the front standing area: [rail side, z]
+  straps: [-1, 1].flatMap((s) => [-0.05, 0.28, 0.61, 0.94, 1.27, 1.60, 1.93, 2.26, 2.59].map((z) => [s, z])),
+  poles: [[-0.52, 3.00], [0.52, 3.00], [-0.52, 2.10], [0.46, 1.98], [0.46, 0.52], [-0.52, 0.45], [-0.14, -0.50], [0.14, -0.50], [-0.18, -2.15], [0.18, -2.15], [-0.18, -3.75], [0.18, -3.75]],
+};
+const SAL = {
+  ceil:  { paint: 0, rough: 0.85, metal: 0.02, col: 0xdcdedc, emis: 0.42 },
+  led:   { paint: 0, rough: 0.50, metal: 0.00, col: 0xf0f4fa, emis: 1.30 },
+  wall:  { paint: 0, rough: 0.75, metal: 0.04, col: 0xbcc0c2, emis: 0.34 },
+  lower: { paint: 0, rough: 0.70, metal: 0.04, col: 0x8a8f94, emis: 0.24 },     // the panels under the windows
+  floor: { paint: 0, rough: 0.92, metal: 0.02, col: 0x474b52, emis: 0.22 },
+  seat:  { paint: 0, rough: 0.95, metal: 0.00, col: 0x2d3f8c, emis: 0.32 },
+  shell: { paint: 0, rough: 0.55, metal: 0.05, col: 0x50555c, emis: 0.24 },
+  pole:  { paint: 0, rough: 0.40, metal: 0.10, col: 0xe6a21a, emis: 0.30 },
+  rail:  { paint: 0, rough: 0.30, metal: 0.45, col: 0xc5cacf, emis: 0.12 },
+  strap: { paint: 0, rough: 0.80, metal: 0.02, col: 0x26282c, emis: 0.12 },
+  ring:  { paint: 0, rough: 0.50, metal: 0.05, col: 0xeee6cf, emis: 0.34 },
+  dash:  { paint: 0, rough: 0.60, metal: 0.05, col: 0x1b1d21, emis: 0.06 },
+};
+function busSaloon(P) {
+  const S = BUS_SAL, parts = [], hw = P.hw, zF = P.zF, zB = P.zB, iw = hw - 0.05, L = zF - zB - 0.3;
+  const zs = (a, b) => [b - a, (a + b) / 2];                   // [length, centre] of a z span
+  // floors, the step between them and the driver's platform
+  { const [l, c] = zs(S.stepZ, zF - 0.30); parts.push(box(iw * 2, 0.02, l, 0, S.floorF - 0.01, c, SAL.floor)); }
+  { const [l, c] = zs(zB + 0.15, S.stepZ); parts.push(box(iw * 2, 0.02, l, 0, S.floorR - 0.01, c, SAL.floor)); }
+  parts.push(box(iw * 2, S.floorR - S.floorF, 0.03, 0, (S.floorR + S.floorF) / 2, S.stepZ, SAL.shell));
+  parts.push(box(0.95, 0.22, 1.25, -0.66, S.floorF + 0.11, 4.62, SAL.shell));
+  for (const s of [-1, 1]) parts.push(box(0.60, 0.25, 0.95, s * 0.80, S.floorF + 0.125, 3.40, SAL.shell));   // front arch plinths
+  // ceiling, its LED strips, the walls under and over the glazing, the pillar trims, the front and back walls
+  parts.push(box(iw * 2, 0.02, L, 0, S.ceil, 0, SAL.ceil));
+  for (const s of [-1, 1]) parts.push(box(0.12, 0.014, L - 0.8, s * 0.46, S.ceil - 0.017, 0, SAL.led));
+  for (const s of [-1, 1]) {
+    parts.push(box(0.02, 1.38 - 0.36, L, s * iw, (1.38 + 0.36) / 2, 0, SAL.lower));
+    parts.push(box(0.07, 0.03, L, s * (iw - 0.03), 1.385, 0, SAL.wall));                     // the sill
+    parts.push(box(0.02, S.ceil - 2.34, L, s * iw, (S.ceil + 2.34) / 2, 0, SAL.wall));
+    for (let i = 0; i < 6; i++) parts.push(box(0.03, 0.96, 0.11, s * (iw - 0.01), 1.86, zB + 1.2 + i * ((zF - zB - 2.4) / 5), SAL.wall));
+  }
+  parts.push(box(iw * 2, 1.40 - S.floorF, 0.02, 0, (1.40 + S.floorF) / 2, zF - 0.12, SAL.dash));
+  parts.push(box(iw * 2, 1.455 - S.floorR, 0.02, 0, (1.455 + S.floorR) / 2, zB + 0.10, SAL.lower));
+  // the cab: dash top under the windscreen, the instrument binnacle, the driver's seat, the wheel on its column, the fare box
+  parts.push(box(iw * 2, 0.06, 0.40, 0, 1.40, zF - 0.30, SAL.dash));
+  parts.push(box(0.50, 0.16, 0.22, S.driver[0], 1.48, zF - 0.42, SAL.dash));
+  { const [x, z, y] = S.driver;
+    parts.push(box(0.50, 0.10, 0.48, x, y - 0.05, z, SAL.dash));
+    parts.push(box(0.50, 0.80, 0.09, x, y + 0.40, z - 0.28, SAL.dash, [-0.10, 0, 0]));
+    const wh = new THREE.TorusGeometry(0.22, 0.02, 4, 14); wh.rotateX(Math.PI / 2 - 0.35); wh.translate(x, 1.46, z + 0.46);
+    parts.push(tag(wh, SAL.dash));
+    parts.push(cyl(0.03, 0.40, x, 1.28, z + 0.56, SAL.dash, 6));
+    parts.push(box(0.30, 0.80, 0.34, x + 0.52, S.floorF + 0.40, z + 0.05, SAL.shell));
+  }
+  // seats: a moquette cushion and back, the back's grey shell, a grab handle on top; the back bench in one piece
+  for (const [x, z, y] of S.seats) {
+    if (z < -4.5) continue;
+    parts.push(box(0.42, 0.10, 0.42, x, y - 0.05, z, SAL.seat));
+    parts.push(box(0.42, 0.60, 0.07, x, y + 0.30, z - 0.235, SAL.seat, [-0.12, 0, 0]));
+    parts.push(box(0.43, 0.56, 0.02, x, y + 0.29, z - 0.285, SAL.shell, [-0.12, 0, 0]));
+    parts.push(box(0.24, 0.035, 0.035, x + (x > 0 ? -0.06 : 0.06), y + 0.62, z - 0.31, SAL.pole));
+  }
+  { const b = S.seats.filter((s) => s[1] < -4.5), y = b[0][2], z = b[0][1];
+    parts.push(box(2.14, 0.10, 0.44, 0, y - 0.05, z, SAL.seat));
+    parts.push(box(2.14, 0.62, 0.08, 0, y + 0.31, z - 0.24, SAL.seat, [-0.10, 0, 0])); }
+  // poles floor to ceiling, the two rails and their straps (a black belt, a pale ring)
+  for (const [x, z] of S.poles) { const f = z < S.stepZ ? S.floorR : S.floorF; parts.push(cyl(0.018, S.ceil - f, x, (S.ceil + f) / 2, z, SAL.pole, 6)); }
+  for (const s of [-1, 1]) parts.push(cyl(0.016, 3.40, s * S.railX, S.railY, 1.20, SAL.rail, 6, 'z'));
+  for (const [s, z] of S.straps) {
+    parts.push(box(0.022, S.railY - S.ringY - 0.03, 0.012, s * S.railX, (S.railY + S.ringY + 0.03) / 2, z, SAL.strap));
+    const r = new THREE.TorusGeometry(0.036, 0.008, 3, 8); r.translate(s * S.railX, S.ringY, z);
+    parts.push(tag(r, SAL.ring));
+  }
   return mergeGeometries(parts, false);
 }
 
@@ -4866,6 +5000,39 @@ const traffic = {
       bill.push(`${key} ${geo.index.count / 3}/${mid.index.count / 3}`);
       meshes += 2;
     }
+    // --- busPax: the nearest buses with people in them. The body without its glazing (still the near, shadow-casting
+    //     tier), the glazing as a tinted, reflecting glass over the open windows, and the saloon mesh inside; the
+    //     passengers are the crowd's scanned people (crowdScan statics), placed by writeMatrices. PAX_BUSES at a time.
+    const raw = (engine.params && engine.params.raw) || {};
+    this.paxOn = byType.has('bus') && raw.busPax !== '0' && TIER !== 'safe';
+    if (this.paxOn) {
+      const B = busBody(BUS, 0, true);
+      this.bodiesPax = mkBody('traffic:bus:pax', B.body, PAX_BUSES, true);
+      // glass: the opacity tints what is behind it, the reflection goes on at full strength (premultiplied: the dark
+      // body colour at `opacity`, the specular unscaled), so the panes read as glass without hiding the saloon
+      this.paxGlassMat = new THREE.MeshStandardMaterial({ name: 'traffic:busGlass', color: 0x0b1117, roughness: 0.04, metalness: 0,
+        transparent: true, premultipliedAlpha: true, opacity: 0.4, depthWrite: false, envMapIntensity: 1.8 });
+      this.paxGlassMat.onBeforeCompile = (sh) => {
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <opaque_fragment>', 'gl_FragColor = vec4( totalDiffuse * diffuseColor.a + totalSpecular + totalEmissiveRadiance, diffuseColor.a );')
+          .replace('#include <premultiplied_alpha_fragment>', '');
+      };
+      this.paxGlassMat.customProgramCacheKey = () => 'traffic:busGlass1';
+      const mk = (geo, mat, name) => {
+        const im = new THREE.InstancedMesh(geo, mat, PAX_BUSES);
+        im.name = name; im.frustumCulled = false; im.castShadow = false; im.count = 0; im.visible = false;
+        im.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        group.add(im);
+        return im;
+      };
+      this.paxGlass = mk(B.glass, this.paxGlassMat, 'traffic:bus:glass');
+      this.paxGlass.receiveShadow = false; this.paxGlass.renderOrder = 1;
+      this.saloon = mk(busSaloon(BUS), this.mat, 'traffic:bus:saloon');
+      this.saloon.receiveShadow = true;                      // (a uniform, not a program variant: the bodies' program)
+      this.saloon.setColorAt(0, _c.set(0xffffff)); this.saloon.instanceColor.needsUpdate = true;
+      bill.push(`bus:pax ${B.body.index.count / 3} glass ${B.glass.index.count / 3} saloon ${this.saloon.geometry.index.count / 3}`);
+      meshes += 3;
+    }
     this._geoBill = bill.join(' ');
     this.impostors = {};
     for (const kind of ['car', 'box']) {
@@ -5373,6 +5540,7 @@ const traffic = {
     const env = want && this._envRT ? this._envRT.texture : null;
     if (this.mat.envMap !== env) this.mat.envMap = env;
     this.mat.envMapIntensity = env ? 1.1 : 1;
+    if (this.paxGlassMat && this.paxGlassMat.envMap !== env) this.paxGlassMat.envMap = env;
     U.env.value = env ? 0.5 : 0.3;
   },
   initEnv() {
@@ -5570,6 +5738,8 @@ const traffic = {
     const contactK = 0.62 * (1 - 0.45 * night);
 
     for (let i = 0; i < this._bodyList.length; i++) this._bodyList[i].__n = 0;
+    if (this.paxOn) this.paxPick(camX, camY, camZ);
+    let nSal = 0;
     let nWheel = 0, nWheelN = 0, nWheelH = 0, nWheelC = 0, nStreak = 0, nContact = 0, nLamp = 0;
     let nPl = 0, nRf = 0, nDs = 0, nLv = 0, nSh = 0;
     const capWN = wheelsNear.instanceMatrix.count, capWH = this.wheelsHeavy.instanceMatrix.count, capWC = this.wheelsCover.instanceMatrix.count;
@@ -5621,7 +5791,11 @@ const traffic = {
         putInstance(this.impostors[T.imp], c, _m);
       } else {
         _m.compose(_p, _q, _s.set(1, 1, 1));
-        putInstance(shadowNear ? this.bodies[c.key] : this.bodiesFar[c.key], c, _m);
+        if (c._pax && this.paxOn && shadowNear && nSal < PAX_BUSES) {
+          // a bus with people in it: open glazing, the saloon, the glass over it (the riders: paxPose, below)
+          putInstance(this.bodiesPax, c, _m);
+          this.saloon.setMatrixAt(nSal, _m); this.paxGlass.setMatrixAt(nSal++, _m);
+        } else putInstance(shadowNear ? this.bodies[c.key] : this.bodiesFar[c.key], c, _m);
       }
       _mc.copy(_m);
 
@@ -5951,6 +6125,17 @@ const traffic = {
     fin(lamps, nLamp, true); fin(streaks, nStreak, true); fin(fx, nFx, true, 'aUvT'); fin(glare, X.nGl, true, 'aUvT'); fin(kp, X.nKp, true);
     fin(plates, nPl, false, 'aUvOff'); fin(roofs, nRf, true, 'aUvOff'); fin(dests, nDs, false, 'aUvOff'); fin(livs, nLv, false, 'aUvOff');
     fin(X.roofGl, X.nRg, true, 'aUvOff');
+    if (this.saloon) {
+      fin(this.saloon, nSal); fin(this.paxGlass, nSal);
+      if (this.paxOn) this.paxPose(night);
+      // the glazing: tinted and mirroring the sky by day, near clear over the lit saloon at night
+      this.paxGlassMat.opacity = 0.38 - 0.22 * night;
+      // its programs off the frame, once lighting has hooked the scene (hidden meshes are not in the boot's precompile)
+      if (!this._paxPre && engine.precompile && engine.stats && engine.stats.frame > 6) {
+        this._paxPre = true;
+        for (const im of [this.paxGlass, this.saloon]) { const v = im.visible; im.visible = true; engine.precompile(im); im.visible = v; }
+      }
+    }
     if (this.roofMat) { const v = 0.34 + 1.20 * night; this.roofMat.color.setRGB(v, v, v); }
     if (this.destMat) { const v = 0.80 + 0.70 * night; this.destMat.color.setRGB(v, v, v); }
     for (let i = 0; i < this._bodyList.length; i++) {
@@ -6081,7 +6266,7 @@ const traffic = {
   // every mesh this module submits, with its live instance count and triangle bill
   meshBill() {
     const all = [...this._bodyList, this.wheels, this.wheelsNear, this.wheelsHeavy, this.wheelsCover, this.shadowOnly, this.lamps, this.fx, this.glare, this.streaks,
-      this.contacts, this.plates, this.destBoards, this.liveries, this.kerbProps, this.sigLens, this.roofGl, ...this.roofs];
+      this.contacts, this.plates, this.destBoards, this.liveries, this.kerbProps, this.sigLens, this.roofGl, ...this.roofs, this.saloon, this.paxGlass];
     const gi = (m) => (m.geometry.index ? m.geometry.index.count : m.geometry.attributes.position.count) / 3;
     let tris = 0, draws = 0;
     const rows = [];
@@ -6130,7 +6315,118 @@ const traffic = {
   stats() {
     const byType = {};
     for (const c of this.cars) byType[c.key] = (byType[c.key] || 0) + 1;
-    return { vehicles: this.cars.length, lanes: this.lanes.length, meshes: this.meshCount, byType, cycle: CYCLE_LEN };
+    const pax = (this.paxBuses || []).map((c) => ({ id: c.id, d: +(c._paxD || 0).toFixed(1), riders: c._pax ? c._pax.filter((r) => r.p).length : 0 }));
+    return { vehicles: this.cars.length, lanes: this.lanes.length, meshes: this.meshCount, byType, cycle: CYCLE_LEN, pax };
+  },
+
+  // ------------------------------------------------------------------------------------------ busPax
+  // A/B at run time (shots, profiling): off puts every bus back on the interior map and takes the riders away
+  setPax(on) {
+    if (!this.saloon) return false;
+    this.paxOn = !!on;
+    if (!on) {
+      for (const c of this.paxBuses || []) c._pax = null;
+      if (this.paxBuses) this.paxBuses.length = 0;
+      const cr = this.engine.get('crowd');
+      if (cr && cr.scanR && cr.scanR.setStatics) cr.scanR.setStatics([], 'bus');
+    }
+    return true;
+  },
+
+  // Which buses carry people this frame: the nearest PAX_BUSES inside PAX_D (one already carrying keeps them to
+  // PAX_OUT, and 2 m of preference over a newcomer). A change of that set re-casts the crowdScan statics channel 'bus'.
+  paxPick(cx, cy, cz) {
+    const cr = this._crowd || this.engine.get('crowd'), scan = cr && cr.scanR;
+    const ok = !!(scan && scan.ready && scan.setStatics && scan.poseAnchor);
+    const want = this._paxWant || (this._paxWant = []), cur = this.paxBuses || (this.paxBuses = []);
+    want.length = 0;
+    if (ok) {
+      for (const c of this.cars) {
+        if (c.T.fam !== 'bus' || c.hidden) continue;
+        const dx = c.x - cx, dy = groundY(c.x, c.z) + c.T.hgt * 0.5 - cy, dz = c.z - cz, d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+        c._paxD = d - (c._pax ? 2 : 0);
+        if (d < (c._pax ? PAX_OUT : PAX_D)) want.push(c);
+      }
+      want.sort((a, b) => a._paxD - b._paxD);
+      if (want.length > PAX_BUSES) want.length = PAX_BUSES;
+    }
+    if (want.length === cur.length && want.every((c) => cur.includes(c))) return;
+    for (const c of cur) if (!want.includes(c)) c._pax = null;
+    for (const c of want) if (!c._pax) c._pax = this.paxCast(c, scan);
+    cur.length = 0;
+    for (const c of want) cur.push(c);
+    if (!scan || !scan.setStatics) return;
+    const list = [];
+    for (const c of cur) for (const r of c._pax) list.push(r.e);
+    const ps = scan.setStatics(list, 'bus') || [];
+    let k = 0;
+    for (const c of cur) for (const r of c._pax) r.p = ps[k++] || null;
+  },
+
+  // Who rides this bus (the same people every time it comes near: seeded by its id). The driver is one of the suited
+  // scans; the seats are taken at PAX_OCC, the strap-hangers stand in the front aisle facing the windows, each with
+  // the right wrist at a strap. Each rider: its static entry and its matrix in the bus's frame (the pose's anchor —
+  // the pelvis over the seat, the wrist under the strap — measured on that scan at the bake).
+  paxCast(c, scan) {
+    const S = BUS_SAL, out = [];
+    let h = ((c.id + 1) * 2654435761) >>> 0;
+    const rnd = () => { h ^= h << 13; h >>>= 0; h ^= h >>> 17; h ^= h << 5; h >>>= 0; return h / 4294967296; };
+    const live = scan.S.filter(Boolean);
+    if (!live.length) return out;
+    const suits = live.filter((Q) => Q.role === 'salaryman');
+    const dKey = (suits.length ? suits : live)[c.id % (suits.length || live.length)].key;
+    const cast = live.map((Q) => Q.key).filter((k) => k !== dKey);
+    for (let i = cast.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = cast[i]; cast[i] = cast[j]; cast[j] = t; }
+    // the tourists / hikers carry packs, which a seat back would cut through: they stand, first in the strap queue
+    const tourist = new Set(live.filter((Q) => Q.role === 'tourist').map((Q) => Q.key));
+    const seated = cast.filter((k) => !tourist.has(k)), standing = cast.filter((k) => tourist.has(k)).concat(seated.slice().reverse());
+    let ci = 0, ti = 0;
+    const cap = MOBILE ? 8 : 24;
+    const place = (key, clip, tx, ty, tz, yaw) => {
+      if (out.length >= cap + 1) return false;
+      const a = scan.poseAnchor(key, clip); if (!a) return false;
+      const [ax, ay, az, si, hgt] = a, cy = Math.cos(yaw), sy = Math.sin(yaw);
+      // the anchor's target in the bus frame; the root is that less the anchor turned by the rider's yaw
+      const ox = ax * cy + az * sy, oz = -ax * sy + az * cy;
+      const y = clip === 'bus_sit' ? ty + 0.11 * hgt / 1.784 - ay : ty;
+      const L = new THREE.Matrix4().compose(new THREE.Vector3(tx - ox, y, tz - oz), new THREE.Quaternion().setFromAxisAngle(UPY, yaw), new THREE.Vector3(si, si, si));
+      out.push({ e: { key, clip, x: c.x, y: c.y || 0, z: c.z, yaw: 0, phase: rnd(), midD: PAX_MID }, L, yaw, p: null });
+      return true;
+    };
+    // the driver, then whoever has each seat (the pelvis 6 cm behind the cushion's middle, toward the backrest)
+    place(dKey, 'bus_sit', S.driver[0], S.driver[2], S.driver[1] - 0.06, 0);
+    for (const [x, z, y] of S.seats) if (rnd() < PAX_OCC && seated.length) place(seated[ci++ % seated.length], 'bus_sit', x, y, z - 0.06, 0);
+    // strap-hangers: 1-4 (on a phone 0-1), no two within 0.6 m on the same rail, facing the rail's own side
+    const n = MOBILE ? (rnd() < 0.5 ? 1 : 0) : 1 + Math.floor(rnd() * 4), taken = [];
+    const straps = S.straps.slice();
+    for (let i = straps.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); const t = straps[i]; straps[i] = straps[j]; straps[j] = t; }
+    for (const [s, z] of straps) {
+      if (taken.length >= n || !standing.length) break;
+      if (taken.some((q) => q[0] === s && Math.abs(q[1] - z) < 0.6)) continue;
+      if (place(standing[ti++ % standing.length], 'bus_strap', s * S.railX, S.floorF, z, s * Math.PI / 2)) taken.push([s, z]);
+    }
+    return out;
+  },
+
+  // Every rider's world matrix from its bus's (the body's own pose: pitch, yaw, roll, the road bob), each frame after
+  // the bodies are placed, whether or not the bus is in view; and the saloon's ceiling light on them.
+  paxPose(night) {
+    const k = 0.24 + 0.30 * night, rim = PAX_RIM;
+    rim[0] = -rimWord(0.84 * k, 0.89 * k, 0.95 * k);
+    for (const c of this.paxBuses) {
+      if (!c._pax || !c._pax.length) continue;
+      _e.set(c.pitch || 0, c.yaw, c.roll || 0); _q.setFromEuler(_e);
+      _mb.compose(_p.set(c.x, c.y || 0, c.z), _q, _s.set(1, 1, 1));
+      for (const r of c._pax) {
+        const p = r.p; if (!p) continue;
+        _m2.multiplyMatrices(_mb, r.L);
+        const el = _m2.elements;
+        if (!p.mw) p.mw = new Float32Array(16);
+        for (let i = 0; i < 16; i++) p.mw[i] = el[i];
+        p.x = el[12]; p.gy = el[13]; p.z = el[14]; p.yaw = c.yaw + r.yaw;
+        p._rim = rim;
+      }
+    }
   },
 
   // Body pitch about local x. +x rotation dips the nose (+z), so a car climbing (front higher, slope > 0) needs the
@@ -6408,7 +6704,13 @@ const _vv = new THREE.Vector3();
 function _v(x, y, z) { return _vv.set(x, y, z); }
 function key6(T) { return T.wheels === 6; }
 
-const _mc = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4();
+const _mc = new THREE.Matrix4(), _m2 = new THREE.Matrix4(), _m3 = new THREE.Matrix4(), _mb = new THREE.Matrix4();
+// the saloon light on the bus riders: crowdScan's rim word, negative (a light they are inside), packed sqrt-RGB
+const PAX_RIM = [0, 0, 0];
+function rimWord(r, g, b) {
+  const q = (v) => Math.round(Math.sqrt(clamp(v, 0, 1)) * 255);
+  return q(r) * 65536 + q(g) * 256 + q(b);
+}
 const _p2 = new THREE.Vector3(), _s2 = new THREE.Vector3();
 
 // append one compacted instance; the per-instance colour is only re-uploaded when the slot changes hands

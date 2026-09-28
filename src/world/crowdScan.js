@@ -29,7 +29,7 @@
 import * as THREE from 'three';
 import * as HUM from '../characters/humanoid.js';
 import { getClip, CLIPS } from '../characters/animations.js';
-import { crumb } from '../core/mobileProfile.js';
+import { crumb, TIER } from '../core/mobileProfile.js';
 
 const QS = typeof location !== 'undefined' ? new URLSearchParams(location.search) : new URLSearchParams('');
 export const CROWD_LEGACY = QS.get('crowdLegacy') === '1';
@@ -44,7 +44,7 @@ const REFL_N = 28;                               // bodies in the wet-road mirro
 const SHADOW_D = 25;                             // no shadow pass beyond this (day only)
 const FAR2_D = 27;                               // the foot pad stops here, the soft blob goes on
 const RIG_CROWN = 1.784;                         // crowd.js: p.scale x this = standing height
-const STATIC_CAP = 12, STATIC_MID2 = 12 * 12;                            // per scan and tier: posed people outside the simulation (setStatics)
+const STATIC_CAP = 16, STATIC_MID2 = 12 * 12;                            // per scan and tier: posed people outside the simulation (setStatics)
 const POOL_MAX = 96, POOL_REBUILD_T = 2.5;           // (three bodies a person at boot, grown on demand: crowd.js binds up to 32 at once)
 const POOL_SWAP_D = 14;                          // crowd.js SCAN_SWAP_D: the pool body's lod0 / lod1 line
 const VAT_W = 4096;                              // texture width in columns (rows wrap in blocks of VAT_F)
@@ -52,6 +52,12 @@ const ALB_N = 256;                               // mirror albedo layer size
 // ids 0..4, frames per cycle. 'brisk' (2026-09-26) is the walk clip with the legs left at its full 2.4 m/s stride (TUNE[4]):
 // a quicker pace is a LONGER stride first (the instance blends walk -> brisk), a quicker step only up to a human cadence
 const CLIP_WANT = [['walk', 24], ['idle', 24], ['run', 16], ['look', 24], ['brisk', 16, 'walk']];
+// held poses for the statics (5, 6: the bus passengers, traffic.js busPax): a key every 2 s of an 8 s loop, so four frames
+// hold every key exactly; neither vatK nor vatClips thins them (8 frames against the walk / idle / run's 30-104). Off with
+// the passengers (?busPax=0, the phones' safe tier): a missing pose falls back to the idle.
+const PAX_ON = QS.get('busPax') !== '0' && TIER !== 'safe';
+const POSE_WANT = PAX_ON ? [['bus_sit', 4], ['bus_strap', 4]] : [];
+export const POSE_ID = { bus_sit: 5, bus_strap: 6 };
 // [mobile] ?vatK=<0..1> scales every clip's frame count, ?vatClips=walk,idle,... bakes only those (the rest fall back to walk /
 // idle, as a missing clip always did): the VAT textures are scans x vertices x frames x 8 bytes, baked at load
 const VAT_K = Number(QS.get('vatK')) > 0 && Number(QS.get('vatK')) < 1 ? Number(QS.get('vatK')) : 1;
@@ -195,18 +201,25 @@ function vatGLSL(defs, FT) {
 }
 const VAT_DECL = 'uniform highp usampler2D uVat; uniform int uVatW;\nattribute vec4 iAnim; attribute vec4 iAnim2;\n';
 const RIM_DECODE = `vec3 crowdRimDecode(float pk) { float r = floor(pk / 65536.0); float g = floor((pk - r * 65536.0) / 256.0); float b = pk - r * 65536.0 - g * 256.0; vec3 e = vec3(r, g, b) / 255.0; return e * e; }`;
-const RIM_VS = (src) => `vRimC = crowdRimDecode(${src}.x);
+// (a negative colour word is a light the person is inside, not a rim: the lit saloon of a bus, traffic.js busPax)
+const RIM_VS = (src) => `vRimC = crowdRimDecode(abs(${src}.x)); vRimI = ${src}.x < 0.0 ? 1.0 : 0.0;
   vRimL = (abs(${src}.y) + abs(${src}.z) > 0.01) ? normalize((viewMatrix * vec4(${src}.y, 0.0, ${src}.z, 0.0)).xyz) : vec3(0.0);`;
 // the old crowd's neon rim (crowd.js rimPatch): an edge on the side facing the brightest emitter near that person,
-// a little of its colour on the cloth, a bounce off the wet road on the down-facing normals; off inside ~3 m
+// a little of its colour on the cloth, a bounce off the wet road on the down-facing normals; off inside ~3 m.
+// Inside a light (vRimI): the ceiling strip over a bus saloon, on the albedo, strongest on what faces up, at any range.
 const RIM_FS = `{ vec3 rN = normalize(normal);
+  if (vRimI > 0.5) {
+    float rUp = dot(rN, normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz)) * 0.5 + 0.5;
+    gl_FragColor.rgb += vRimC * diffuseColor.rgb * (0.35 + 0.65 * rUp);
+  } else {
     float rNV = 1.0 - clamp(dot(rN, normalize(vViewPosition)), 0.0, 1.0);
     float crowdF = rNV * rNV;
     float rSide = dot(vRimL, vRimL) > 0.25 ? clamp(dot(rN, vRimL) * 0.7 + 0.55, 0.3, 1.0) : 0.6;
     float rCam = clamp((length(vViewPosition) - 3.0) / 6.0, 0.0, 1.0);
     vec3 rAlb = 0.28 + 0.72 * sqrt(max(diffuseColor.rgb, vec3(0.0)));
     float rBounce = clamp((0.3 - (vec4(rN, 0.0) * viewMatrix).y) / 1.3, 0.0, 1.0);
-    gl_FragColor.rgb += vRimC * rCam * (rSide * (crowdF * 2.2 * rAlb + CROWD_FILL * diffuseColor.rgb) + 0.15 * rBounce * rAlb); }`;
+    gl_FragColor.rgb += vRimC * rCam * (rSide * (crowdF * 2.2 * rAlb + CROWD_FILL * diffuseColor.rgb) + 0.15 * rBounce * rAlb);
+  } }`;
 // a sky / ground fill on the scans' own albedo (the street at night is lit by signs, not by a sky): the crowd has to
 // read against the frontages the way the hero does under his character light. Irradiance, so it rides the albedo.
 const FILL_FS = `{ vec3 fUp = normalize((viewMatrix * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
@@ -288,6 +301,13 @@ export class CrowdScan {
     if (!defs[2]) defs[2] = defs[0];            // no run: a hurry is a brisk walk
     if (!defs[3]) defs[3] = defs[1];            // no gawk idle: the ring stands in the idle
     if (!defs[4]) defs[4] = defs[0];
+    // the statics' held poses (POSE_ID), baked untuned (no gait / TUNE pull toward the scan's standing stance)
+    for (const [name, F] of POSE_WANT) {
+      const id = POSE_ID[name], clip = CLIPS.includes(name) ? getClip(name) : null;
+      defs[id] = clip ? { id, name, clip, F, base, dur: clip.duration, stride: null, pose: true } : null;
+      if (clip) base += F;
+    }
+    for (const id of Object.values(POSE_ID)) if (!defs[id]) defs[id] = defs[1];
     this.defs = defs; this.FT = base;
     this.hasLook = defs[3].id === 3; this.hasRun = defs[2].id === 2; this.hasBrisk = defs[4].id === 4;
     this.idleDur = defs[1].dur; this.lookDur = defs[3].dur;
@@ -322,7 +342,7 @@ export class CrowdScan {
     const bones = h.skeleton.bones, inv = h.skeleton.boneInverses, NB = bones.length, FT = this.FT;
     const mats = new Float32Array(FT * NB * 16), feet = new Float32Array(FT * 4), fz = new Float32Array(64 * 4);
     const mixer = h.mixer;
-    const kneeLog = {}, liftLog = {};
+    const kneeLog = {}, liftLog = {}, anchors = {};
     for (let di = 0; di < this.defs.length; di++) {
       const d = this.defs[di];
       if (d.id !== di) continue;                                   // an alias (no run / no look) is its clip's rows
@@ -350,10 +370,16 @@ export class CrowdScan {
       for (let k = 0; k < d.F; k++) {
         a.time = (k / d.F) * d.dur;
         mixer.update(0);
-        tunePose(h, bind, TUNE[d.id], 1);
+        if (!d.pose) tunePose(h, bind, TUNE[d.id], 1);
         if (lift > 0) liftLegs(h, lift);
         clampHandsLike(h);
         h.group.updateMatrixWorld(true);
+        // a held pose's anchors, in the bake's space (x the instance scale at the draw): the pelvis a seat carries, the
+        // right wrist a strap-hanger's strap is under (traffic.js busPax)
+        if (d.pose && k === 0) {
+          const b = h.bones[d.name === 'bus_sit' ? 'Hips' : 'RightHand'];
+          if (b) anchors[d.name] = _v.setFromMatrixPosition(b.matrixWorld).toArray();
+        }
         const f = d.base + k;
         for (let j = 0; j < NB; j++) { _m.multiplyMatrices(bones[j].matrixWorld, inv[j]); _m.toArray(mats, (f * NB + j) * 16); }
         // planted-foot table: ankle x / z of the lower foot and its height
@@ -395,7 +421,7 @@ export class CrowdScan {
     this.S[s] = {
       knee: { walk: kneeLog[0] ? [+kneeLog[0].mid.toFixed(1), +kneeLog[0].max.toFixed(1)] : null, brisk: kneeLog[4] ? [+kneeLog[4].mid.toFixed(1), +kneeLog[4].max.toFixed(1)] : null },
       lift: [liftLog[0] ? liftLog[0].lift : 0, 0, 0, 0, liftLog[4] ? liftLog[4].lift : 0], kneeBefore: [liftLog[0] ? +liftLog[0].phi.toFixed(1) : null, liftLog[4] ? +liftLog[4].phi.toFixed(1) : null],
-      bakeScale: gs, i: s, key: sc.key, variant: sc.variant, role: sc.role || null, height: sc.height || bakeH, bakeH, stride, strideRun, strideBrisk: Math.max(strideBrisk, stride), feet, bind,
+      bakeScale: gs, i: s, key: sc.key, variant: sc.variant, role: sc.role || null, height: sc.height || bakeH, bakeH, stride, strideRun, strideBrisk: Math.max(strideBrisk, stride), feet, bind, anchors,
       parts: [P1, P2], geo: [m1.geometry, m2.geometry], tri1: Math.round(trisOf(m1)), tri2: Math.round(trisOf(m2)),
       maps: { map: src.map || null, normalMap: src.normalMap || null, roughnessMap: src.roughnessMap || null, metalnessMap: src.metalnessMap || null, aoMap: src.aoMap || null },
       alb: src.map && src.map.image ? src.map.image : null,
@@ -503,7 +529,7 @@ export class CrowdScan {
   patch(sh, mode) {
     // mode: 'mid' | 'far' (per-scan instanced, aVat) | 'mirror' (pulled) | 'pool' (a rigged body: rim uniform)
     const inst = mode !== 'pool';
-    let vdecl = 'varying float vFade; varying vec3 vRimC; varying vec3 vRimL;\n' + RIM_DECODE;
+    let vdecl = 'varying float vFade; varying vec3 vRimC; varying vec3 vRimL; varying float vRimI;\n' + RIM_DECODE;
     if (inst) vdecl = VAT_DECL + 'attribute vec3 aRim;\n' + (mode === 'mirror' ? '' : 'attribute float aVat;\n') + vdecl + vatGLSL(this.defs, this.FT);
     else vdecl = 'uniform vec3 uRim;\n' + vdecl;
     if (mode === 'mirror') vdecl = 'uniform highp sampler2D uCorner; uniform int uCornerW; uniform int uCMax;\nvarying vec2 vScanUv; flat varying float vLayer;\n' + vdecl;
@@ -527,7 +553,7 @@ export class CrowdScan {
       sh.vertexShader = sh.vertexShader.replace('#include <common>', '#include <common>\n' + vdecl)
         .replace('#include <begin_vertex>', `vFade = 1.0;\n${RIM_VS('uRim')}\n#include <begin_vertex>`);
     }
-    let fdecl = 'varying float vFade; varying vec3 vRimC; varying vec3 vRimL; uniform vec3 uFillSky; uniform vec3 uFillGnd;\n';
+    let fdecl = 'varying float vFade; varying vec3 vRimC; varying vec3 vRimL; varying float vRimI; uniform vec3 uFillSky; uniform vec3 uFillGnd;\n';
     if (mode === 'mirror') fdecl += 'uniform highp sampler2DArray uAlb; varying vec2 vScanUv; flat varying float vLayer;\n';
     sh.fragmentShader = '#define CROWD_FILL 0.95\n' + sh.fragmentShader
       .replace('#include <common>', '#include <common>\n' + fdecl)
@@ -842,17 +868,25 @@ export class CrowdScan {
 
   // the standing / second clip of an instance: its id, weight and phase (the statics carry none of the gait state)
   clipB(p, t) {
+    if (p._cS != null) {                          // a static in a held pose (POSE_ID): that clip alone, on its own clock
+      const d = this.defs[p._cS];
+      return [d.id, 1, p._frz != null ? p._frz : ((t / d.dur + p._ip) % 1 + 1) % 1];
+    }
     if (p._cB == null) { const id = p.gawk && this.hasLook ? 3 : 1; return [id, 1 - (p._aw || 0), p._frz != null ? p._frz : this.idlePhase(p, t, id)]; }
     const id = p._cB;
     return [id, p._wB, id === 4 ? p._ap : p._frz != null ? p._frz : this.idlePhase(p, t, id)];
   }
 
   writeInst(T, k, p, t, S, d2) {
-    const mi = T.mesh.instanceMatrix.array, o = k * 16, s = p._si || 1, c = Math.cos(p.yaw) * s, sn = Math.sin(p.yaw) * s;
-    mi[o] = c; mi[o + 1] = 0; mi[o + 2] = -sn; mi[o + 3] = 0;
-    mi[o + 4] = 0; mi[o + 5] = s; mi[o + 6] = 0; mi[o + 7] = 0;
-    mi[o + 8] = sn; mi[o + 9] = 0; mi[o + 10] = c; mi[o + 11] = 0;
-    mi[o + 12] = p.x; mi[o + 13] = p.gy; mi[o + 14] = p.z; mi[o + 15] = 1;
+    const mi = T.mesh.instanceMatrix.array, o = k * 16;
+    if (p.mw) mi.set(p.mw, o);                     // a static riding something (a bus passenger): its full world matrix, scale included
+    else {
+      const s = p._si || 1, c = Math.cos(p.yaw) * s, sn = Math.sin(p.yaw) * s;
+      mi[o] = c; mi[o + 1] = 0; mi[o + 2] = -sn; mi[o + 3] = 0;
+      mi[o + 4] = 0; mi[o + 5] = s; mi[o + 6] = 0; mi[o + 7] = 0;
+      mi[o + 8] = sn; mi[o + 9] = 0; mi[o + 10] = c; mi[o + 11] = 0;
+      mi[o + 12] = p.x; mi[o + 13] = p.gy; mi[o + 14] = p.z; mi[o + 15] = 1;
+    }
     const idA = p._run && this.hasRun ? 2 : 0, [idB, wB, phB] = this.clipB(p, t);
     const a = T.aAnim.array, a2 = T.aAnim2.array, r = T.aRim.array, o4 = k * 4, o3 = k * 3;
     a[o4] = idA; a[o4 + 1] = p._ap; a[o4 + 2] = idB; a[o4 + 3] = phB;   // (_frz: a posed static held still, a shop-window mannequin)
@@ -1061,25 +1095,40 @@ export class CrowdScan {
     st.draws = draws + poolD;
   }
 
-  // ---- statics: posed people outside the crowd simulation (the shop interiors, city interiors.js). Each entry
-  //      { key (scan key), x, y (floor), z, yaw, clip: 'idle' | 'look', phase 0..1, freeze? }; they are drawn in the scans' own
-  //      instanced tiers (STATIC_CAP reserved per scan and tier), culled and tiered like the crowd, no shadow / mirror.
-  setStatics(list) {
+  // ---- statics: posed people outside the crowd simulation (the shop interiors, city interiors.js; the bus passengers,
+  //      traffic.js busPax). Each entry { key (scan key), x, y (floor), z, yaw, clip: 'idle' | 'look' | 'bus_sit' |
+  //      'bus_strap', phase 0..1, freeze?, midD? (metres inside which the lod1 tier draws it; default 12) }; they are
+  //      drawn in the scans' own instanced tiers (STATIC_CAP reserved per scan and tier), culled and tiered like the crowd,
+  //      no shadow / mirror. `ch` names the caller's own set (each call replaces only that one). A posed object's p.mw
+  //      (16 floats, scale included), when its owner sets it, is its world matrix outright (a passenger riding a bus).
+  setStatics(list, ch = 'rooms') {
     // the tiers that carry posed people draw before the city: the shop interiors' depth punch (interiors.js) is written
     // between the rooms and the city and would otherwise hide the people standing behind a window
     if (!this._stOrder && this.root) { this._stOrder = true; this.root.traverse((o) => { if (o.isInstancedMesh && /^crowdScan:(mid|far):/.test(o.name)) o.renderOrder = -2; }); }
-    this.statics = [];
     if (!this.keyIdx) { this.keyIdx = new Map(); this.S.forEach((Q, i) => { if (Q) this.keyIdx.set(Q.key, i); }); }
     // returns the posed objects aligned with `list` (null where the scan is not baked): the caller drives p.fade
     // (0..1, the crowd's own dithered fade) to cross-fade people in and out
-    const out = [];
+    const out = [], mine = [];
     for (const e of list || []) {
       const i = this.keyIdx.get(e.key); if (i == null) { out.push(null); continue; }
-      const Q = this.S[i];
-      const p = { x: e.x, z: e.z, gy: e.y || 0, yaw: e.yaw || 0, _si: Q.height / Q.bakeH, _run: false, gawk: e.clip === 'look', _ap: 0, _aw: 0, _ip: e.phase || 0, _frz: e.freeze ? (e.phase || 0) : null, hero: false, fade: e.fade ?? 1, _rim: null };
-      this.statics.push({ sk: i, p }); out.push(p);
+      const Q = this.S[i], pose = POSE_ID[e.clip];
+      const p = { x: e.x, z: e.z, gy: e.y || 0, yaw: e.yaw || 0, _si: Q.height / Q.bakeH, _run: false, gawk: e.clip === 'look', _cS: pose != null ? pose : null, _ap: 0, _aw: 0, _ip: e.phase || 0, _frz: e.freeze ? (e.phase || 0) : null, hero: false, fade: e.fade ?? 1, _rim: null,
+        _mid2: e.midD != null ? e.midD * e.midD : STATIC_MID2 };
+      mine.push({ sk: i, p }); out.push(p);
     }
+    (this.stCh || (this.stCh = new Map())).set(ch, mine);
+    this.statics = [].concat(...this.stCh.values());
     return out;
+  }
+  // a held pose's anchor in the posed person's own frame, metres at their drawn height (x left, y up, z forward, from
+  // the feet): 'bus_sit' the pelvis, 'bus_strap' the right wrist; then the instance scale and the drawn height.
+  // null when the pose or the scan is not baked.
+  poseAnchor(key, clip) {
+    if (!this.keyIdx) { this.keyIdx = new Map(); this.S.forEach((Q, i) => { if (Q) this.keyIdx.set(Q.key, i); }); }
+    const i = this.keyIdx.get(key), Q = i != null ? this.S[i] : null, a = Q && Q.anchors && Q.anchors[clip];
+    if (!a || !this.defs[POSE_ID[clip]] || this.defs[POSE_ID[clip]].id !== POSE_ID[clip]) return null;
+    const s = Q.height / Q.bakeH;
+    return [a[0] * s, a[1] * s, a[2] * s, s, Q.height];
   }
   packStatics(frustum, cx, cz, mid2) {
     const out = this._stat || (this._stat = new Map());
@@ -1090,7 +1139,7 @@ export class CrowdScan {
       _sph.center.set(p.x, p.gy + 0.85, p.z); _sph.radius = 1.1;
       if (!frustum.intersectsSphere(_sph)) continue;
       let v = out.get(s.sk); if (!v) out.set(s.sk, v = [[], []]);
-      v[d2 < Math.min(mid2, STATIC_MID2) ? 0 : 1].push(p);                          // behind glass: the far tier past 12 m
+      v[d2 < Math.min(mid2, p._mid2) ? 0 : 1].push(p);                          // behind glass: the far tier past 12 m
     }
     return out;
   }
@@ -1099,7 +1148,8 @@ export class CrowdScan {
     const st = this.stat;
     return { kind: this.src.kind, scans: this.S.filter(Boolean).length, bakeMs: Math.round(st.bakeMs), maxSliceMs: Math.round(this.maxSlice),
       vatMB: +(st.vatMid + st.vatFar).toFixed(1), mirrorMB: +st.mirrorMB.toFixed(1), mid: st.mid, far: st.far, pool: st.pool, poolSeen: st.poolSeen, refl: st.refl,
-      midTris: st.midTris, farTris: st.farTris, draws: st.draws, cpuMs: +(st.ms || 0).toFixed(2), shade: SHADE, poolBodies: this.crowd.heroes.length, poolBuilds: this.poolBuilds, midD: MID_D };
+      midTris: st.midTris, farTris: st.farTris, draws: st.draws, cpuMs: +(st.ms || 0).toFixed(2), shade: SHADE, poolBodies: this.crowd.heroes.length, poolBuilds: this.poolBuilds, midD: MID_D,
+      statics: this.stCh ? Object.fromEntries([...this.stCh].map(([k, v]) => [k, v.length])) : {}, poses: Object.keys(POSE_ID).filter((n) => this.defs && this.defs[POSE_ID[n]].id === POSE_ID[n]) };
   }
 }
 

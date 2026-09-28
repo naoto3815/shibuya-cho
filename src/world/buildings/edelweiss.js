@@ -40,5 +40,8 @@ export function buildEdelweiss(b,ctx,base){
   const [sx,sy,sz]=pos(3.25,1.15,1.87);S.signQuad(batch,sx,sy,sz,nx,nz,{text:'Corpo Edelweiss',sub:'コーポエーデルワイス',w:.79,h:.61,bg:'#182525',fg:'#d7bd71',emissive:.15});
   for(let k=0;k<7;k++){const p=pos(3.3+(k%2)*.2,1.95+k*.1,1.6);const g=new THREE.IcosahedronGeometry(.4,1);g.translate(...p);batch.add(green,g,...c);}
  }
- return {height:h,facades:[],colliders:L.edgeColliders(poly,h)};
+ const colliders=L.edgeColliders(poly,h);
+ // front: the entrance stair's cheek walls are solid (the treads themselves are walkable — shinsen.js lifts the ground)
+ if(front){const nx=.462,nz=.887,tx=.887,tz=-.462,[ox,oz]=HOME.door;for(const u of [.73,2.87])colliders.push(S.boxCollider(ox+tx*u+nx*.82,oz+tz*u+nz*.82,.22,4,2.04,Math.atan2(nx,nz),-1));}
+ return {height:h,facades:[],colliders};
 }

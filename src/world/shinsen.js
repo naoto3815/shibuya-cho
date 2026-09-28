@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import {buildShinsenSurroundings} from './shinsenSurroundings.js';
+import {buildShinsenSurroundings,CROSSING} from './shinsenSurroundings.js';
 import {createApartment} from './apartment301.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {groundY} from './cityData.js';
@@ -24,7 +24,8 @@ export default {
   }
   this.oldGround=engine.world.groundBase;
   engine.world.groundBase=(x,z)=>{
-   if(x>=-648&&x<=-620&&z>=246&&z<=254){const t=Math.max(0,Math.min(1,(x+648)/6)),g=this.oldGround(x,z);return g+(y-g)*t-(engine.world.groundSlab?.(x,z)||0);}
+   // floor reaches the south wall (z 255.3): the strip in front of the stair opening was terrain, 1.2 m under the slab
+   if(x>=-648&&x<=-620&&z>=(x>=-627.6?244.7:246)&&z<=255.3){const t=Math.max(0,Math.min(1,(x+648)/6)),g=this.oldGround(x,z);return g+(y-g)*t-(engine.world.groundSlab?.(x,z)||0);}
    return this.oldGround(x,z);
   };
   box(-634,y+3.5,250,25,.3,10,tile);
@@ -45,13 +46,25 @@ export default {
   sign('1 渋谷方面　　2 吉祥寺方面',-621,y+2.3,250,7,.6,-1,0);
   sign('駅事務室',-641,y+2.1,255.05,2,.35,0,-1);
   // South approach has a short stair flight. Treads match the contact surface.
-  for(let z=256;z<=263;z+=.5){const t=(z-256)/7,yy=y*(1-t)+(groundY(-630,264)+.15)*t;box(-630,yy-.12,z,3,.24,.52,tile);}
-  const prev=engine.world.groundBase;engine.world.groundBase=(x,z)=>x>=-631.5&&x<=-628.5&&z>=254&&z<=264?y-.15+(groundY(x,264)+.15-y)*Math.max(0,(z-256)/8):prev(x,z);
+  const foot=groundY(-630,264)+.15;
+  for(let z=256;z<=263;z+=.5){const t=(z-256)/7,yy=y*(1-t)+foot*t;box(-630,yy-.12,z,3,.24,.52,tile);}
+  // contact surface = the tread tops (same t as above); it was 15 cm under the landing and fell behind the treads
+  const prev=engine.world.groundBase;engine.world.groundBase=(x,z)=>x>=-631.5&&x<=-628.5&&z>=255.3&&z<=263.25?y+(foot-y)*Math.min(1,Math.max(0,(z-256)/7))-(engine.world.groundSlab?.(x,z)||0):prev(x,z);
+  // the stair's cheeks: it spans the rail cutting (z 256–258), so stepping off its side dropped you into the track bed
+  for(const x of [-631.7,-628.3]){
+   for(let z=255.5;z<260.5;z+=.5){const top=y+(foot-y)*Math.min(1,Math.max(0,(z+.25-256)/7))+1,bot=CROSSING.y-.3;box(x,(top+bot)/2,z+.25,.2,top-bot,.5,tile);}
+   engine.world.addStatic(new THREE.Box3(new THREE.Vector3(x-.1,CROSSING.y-2,255.3),new THREE.Vector3(x+.1,y+3,260.5)),{tag:'station'});
+  }
+  for(const [a,b] of [[-634,-631.7],[-628.3,-624]])engine.world.addStatic(new THREE.Box3(new THREE.Vector3(a,foot-4,255.2),new THREE.Vector3(b,y+3,256.2)),{tag:'station'});
   buildShinsenSurroundings(engine,this.root,box,sign,{tile,silver,dark,yellow,white,light},y);
-  // Small return gate outside the existing Inokashira station portal.
-  const sy=groundY(...SHIBUYA_RAIL.gate)+.15;
-  sign('井の頭線 渋谷駅',SHIBUYA_RAIL.gate[0],sy+2.8,SHIBUYA_RAIL.gate[1],6,.75,1,0,'Shibuya · IN01');
-  for(const dz of [-2,0,2]){box(SHIBUYA_RAIL.gate[0]-.5,sy+.48,SHIBUYA_RAIL.gate[1]+dz,1.8,.96,.42,silver);box(SHIBUYA_RAIL.gate[0]-.5,sy+1,SHIBUYA_RAIL.gate[1]+dz,1.8,.08,.46,blue);}
+  // 渋谷 side: no gate of our own — the ride button sits at the foot of the 西口 stair / escalator up to the 井の頭線
+  // 中央口 on the Mark City 2F deck (westDeck.js builds them; SHIBUYA_RAIL.gate is their foot).
+  // Home entrance stair (edelweiss.js): 8 treads of 0.2 m up to the 1.6 m landing. The ground follows the treads, so
+  // walking up to the door climbs them instead of sinking into them.
+  {const [ox,oz]=HOME.door,hy=groundY(...HOME.approach),prevH=engine.world.groundBase;
+   engine.world.groundBase=(x,z)=>{const dx=x-ox,dz=z-oz,u=dx*.887-dz*.462,d=dx*.462+dz*.887;
+    if(u>=.85&&u<=2.75&&d>=-1.2&&d<=1.84){const k=Math.min(7,Math.max(0,Math.floor((1.84-d)/.27)));return hy+(k+1)*.2-(engine.world.groundSlab?.(x,z)||0);}
+    return prevH(x,z);};}
   // Merge static meshes by material; lights and collision volumes remain independent.
   const groups=new Map();for(const mesh of [...this.root.children])if(mesh.isMesh){mesh.updateMatrix();const list=groups.get(mesh.material)||[];list.push(mesh.geometry.clone().applyMatrix4(mesh.matrix));groups.set(mesh.material,list);this.root.remove(mesh);mesh.geometry.dispose();}
   for(const [mat,geos] of groups){const merged=mergeGeometries(geos,false);for(const geo of geos)geo.dispose();const mesh=new THREE.Mesh(merged,mat);mesh.castShadow=true;mesh.receiveShadow=true;this.root.add(mesh);}
@@ -67,5 +80,5 @@ export default {
   e.state.frozen=true;const destination=id==='shinsen'?SHIBUYA_RAIL:SHINSEN;
   this.timer=setTimeout(()=>{const p=e.player,[x,z]=destination.arrival;p.position.set(x,e.world.groundHeight(x,z),z);p.velocity.set(0,0,0);p.yaw=id==='shinsen'?0:-Math.PI/2;p.group.rotation.y=p.yaw;p.setState('idle');p.humanoid.play('idle',{fade:.15});e.get('camera')?.resetRig?.();e.events.emit('rail:arrive',{station:destination.name});this.overlay.hidden=true;this.pending=false;e.state.frozen=false;},1000);return true;
  },
- update(){if(!this.button)return;const e=this.engine,id=this.nearby();this.button.hidden=this.pending||!id||!canUseRail(e.state,e.player);if(this.button.hidden)return;this.button.textContent=id==='homeExit'?'E ／ 自宅を出る':id==='home'?'E ／ 自宅に入る　301号室':id==='shinsen'?'E ／ 渋谷駅へ移動':'E ／ 神泉駅へ移動';if(e.input.buttons.interact.pressed){e.input.buttons.interact.pressed=false;this.use();}}
+ update(){if(!this.button)return;const e=this.engine,id=this.nearby();this.button.hidden=this.pending||!id||!canUseRail(e.state,e.player);if(this.button.hidden)return;this.button.textContent=id==='homeExit'?'E ／ 自宅を出る':id==='home'?'E ／ 自宅に入る　301号室':id==='shinsen'?'E ／ 井の頭線で渋谷駅へ':'E ／ 井の頭線で神泉駅へ';if(e.input.buttons.interact.pressed){e.input.buttons.interact.pressed=false;this.use();}}
 };
