@@ -47,6 +47,7 @@ import * as smallLandmarks from './buildings/smallLandmarks.js';
 import { buildRedevelopment } from './buildings/bunkamura.js';
 import { dressRetail } from './buildings/retailFronts.js';
 import { buildWestExit } from './buildings/westExit.js';
+import { buildWestDeck } from './buildings/westDeck.js';
 import { buildEastExit } from './buildings/eastExit.js';
 import { buildUnderTrack } from './buildings/underTrack.js';
 import { SHOP_TENANTS } from './buildings/tenantsData.js';
@@ -174,8 +175,10 @@ const city = {
       const lots = packBlock(blk, rng.fork(nB * 13 + 5), ctx);
       if (blk.id === 'bunkamura_n' || blk.id === 'dogenzaka_w1') {
         for (const lot of lots) {
-          if (['bunkamura_n_0','bunkamura_n_9'].includes(lot.id)) lot.retail = 'discount';
-          if (['dogenzaka_w1_9','dogenzaka_w1_10'].includes(lot.id)) lot.retail = 'electronics';
+          // LABY 渋谷 stands on these three lots and the scope footprint west of them (OSM 148780539); MEGA ドン・キホーヂ is
+          // on its own OSM footprint north-west of here (scope.js), not on bunkamura_n
+          if (['dogenzaka_w1_8','dogenzaka_w1_9','dogenzaka_w1_10'].includes(lot.id)) lot.retail = 'electronics';
+          if (lot.id === 'dogenzaka_w1_10') lot.retailMain = true;
           if (lot.retail) {
             lot.storeys = 7; lot.gf = 4; lot.sh = 3.5;
             lot.groundFloor = 'wall'; lot.noRoofClutter = true; lot.noStairs = true;
@@ -199,7 +202,7 @@ const city = {
         const r = buildBuilding(spec, { batch, inst, rng: rng.fork(lot.extra ? nB * 7 + 7919 + lot.extra : nB * 7 + 11), pools: CITY.tenantPools, billboards: this.billboards, stairOk: ctx.stairOk, CITY });
         batch.lift = inst.lift = 0;
         liftBuilt(r, this.billboards, nb0, lv.lo);
-        if (lot.retail) { dressRetail({batch,group},lot,r.height,lv.lo); r.facades.length=0; this.billboards.splice(nb0); }
+        if (lot.retail) { dressRetail({batch,group,field:streets.field},lot,r.height,lv.lo); r.facades.length=0; this.billboards.splice(nb0); }
         for (const col of r.colliders) world.addStatic(col, { tag: 'building' });
         this.facades.push(...r.facades);
         plan.buildings.push({ poly: lot.poly, h: r.height, base: lv.lo, id: lot.id, style: lot.style, storeys: lot.storeys });
@@ -320,6 +323,8 @@ const city = {
 
     // ---- 西口 bus terminal (islands, canopies, のりば, kerb shelters, guard pipes) + the 渋谷駅街区 construction yard
     try { const r = buildWestExit(ctx); for (const col of r.colliders) world.addStatic(col, { tag: 'westExit' }); } catch (e) { console.error('[city] west exit failed', e); }
+    // ---- the Mark City ⇄ station glazed bridge and the decks over the 西口 bus terminal
+    try { const r = buildWestDeck(ctx); for (const col of r.colliders) world.addStatic(col, { tag: 'westDeck' }); } catch (e) { console.error('[city] west deck failed', e); }
     // ---- 東口 bus terminal (のりば poles, queues, canopies, the disused island, 地下広場 entrances, the 2F deck)
     try { const r = buildEastExit(ctx); for (const col of r.colliders) world.addStatic(col, { tag: 'eastExit' }); } catch (e) { console.error('[city] east exit failed', e); }
     // ---- the closed railway structure under the JR viaduct north of 宮益坂 (ガード下 shops, walls, shutters)

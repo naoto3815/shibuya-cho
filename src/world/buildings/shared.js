@@ -17,7 +17,7 @@ export const HEDGE_GEO = new THREE.SphereGeometry(0.55, 7, 5);   // shared hedge
  * Curtain wall / panel facade texture covering W × H metres (bays × storeys). spandrelFrac = opaque part of each
  * storey (0 = all glass, 0.7 = slit windows). lit = probability a run of bays on a floor is lit at night.
  */
-function curtainTex({ W = 12, H = 28, bays = 8, storeys = 8, glass = [70, 92, 118], spandrel = [40, 44, 52], mullion = [22, 24, 28], lit = 0.5, warm = 0.65, seed = 1, spandrelFrac = 0.26, litColor = [255, 214, 160], coolColor = [205, 222, 255], ribs = 0, joints = true, punched = 0, tint = null, bright = [0.55, 1.0], flood = 0, floodColor = [252, 248, 242], mode = 'runs', tower = false } = {}) {
+function curtainTex({ W = 12, H = 28, bays = 8, storeys = 8, glass = [70, 92, 118], spandrel = [40, 44, 52], mullion = [22, 24, 28], lit = 0.5, warm = 0.65, seed = 1, spandrelFrac = 0.26, litColor = [255, 214, 160], coolColor = [205, 222, 255], ribs = 0, joints = true, punched = 0, tint = null, bright = [0.55, 1.0], flood = 0, floodColor = [252, 248, 242], mode = 'runs', tower = false , frame = null} = {}) {
   // towers: 24 storeys × 8 bays on a 512 × 2048 canvas (84 m repeat, no visible 8-storey tiling on a 230 m shaft);
   // panels: 8 storeys on 512 × 512
   if (tower) { storeys = 24; H = 84; }
@@ -81,6 +81,8 @@ function curtainTex({ W = 12, H = 28, bays = 8, storeys = 8, glass = [70, 92, 11
           }
         }
       }
+      // `frame`: a coloured frame round every window (渋谷駅前ビル's red window frames)
+      if (frame) { mc.strokeStyle = rgb(frame); mc.lineWidth = 7; for (let k = run.b; k < run.b + run.len; k++) { const bx0 = punched ? k * bw + (bw - bw * punched) / 2 : k * bw, bx1 = punched ? bx0 + bw * punched : (k + 1) * bw; mc.strokeRect(bx0 + 3.5, gy0 + 0.5, bx1 - bx0 - 7, gy1 - gy0 - 1); } }
       void x0; void x1;
     }
     // spandrel shading + joints
@@ -144,6 +146,8 @@ export function mats() {
     glassHikarie: curtainMat('glassHikarie', { seed: 22, glass: [88, 104, 124], spandrel: [58, 62, 70], lit: 0.6, spandrelFrac: 0.18, warm: 0.5, flood: 0.08, tower: true, mode: 'office' }, { roughness: 0.28, metalness: 0.45 }),
     glassDark:    curtainMat('glassDark',    { seed: 23, glass: [38, 42, 50], spandrel: [22, 24, 28], lit: 0.32, spandrelFrac: 0.3, flood: 0.05 }, { roughness: 0.3, metalness: 0.5 }),
     glassStream:  curtainMat('glassStream',  { seed: 24, glass: [70, 100, 110], spandrel: [120, 124, 128], lit: 0.55, spandrelFrac: 0.34, flood: 0.08, tower: true, mode: 'office' }, { roughness: 0.3, metalness: 0.35 }),
+    // 渋谷駅前ビル: white panels, every window in a red frame (Street View 2023-09, the 西口 face)
+    panelRedFrame: curtainMat('panelRedFrame', { seed: 33, glass: [46, 58, 78], spandrel: [230, 228, 222], mullion: [206, 204, 198], frame: [204, 34, 42], lit: 0.4, spandrelFrac: 0.36, bays: 6, punched: 0.74, flood: 0.14 }, { roughness: 0.5, metalness: 0.1 }),
     panelWhite:   curtainMat('panelWhite',   { seed: 25, glass: [48, 60, 78], spandrel: [214, 212, 206], mullion: [150, 150, 146], lit: 0.45, spandrelFrac: 0.55, flood: 0.14 }, { roughness: 0.5, metalness: 0.15 }),
     // 109 drum / MAGNET spandrels: cool aluminium, strong 30 cm corrugation, cool floodlight
     panelSilver:  curtainMat('panelSilver',  { seed: 26, glass: [40, 46, 56], spandrel: [168, 172, 180], mullion: [120, 122, 126], lit: 0.15, spandrelFrac: 0.82, ribs: 12, joints: false, bright: [0.3, 0.8], flood: 0.32, floodColor: [236, 240, 248] }, { roughness: 0.5, metalness: 0.2, env: 1.0 }),

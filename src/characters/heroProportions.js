@@ -1,5 +1,5 @@
 // Canonical standing height; source scans stay at their authored size.
-export const HERO_HEIGHT = 1.90;
+export const HERO_HEIGHT = 1.95;
 export const HERO_ASSET_HEIGHT = 1.82;
 
 // Keep face, collar, hands and shoes at their reference size; lift the trouser rise.

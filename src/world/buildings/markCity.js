@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import * as L from './lib.js';
 import * as S from './shared.js';
 import { getAtlases, tenantType, SHOP_OF_TYPE } from './genericBuilding.js';
+import { BRIDGE, Y as DECK_Y } from './westDeck.js';
 
 export const KEYS = ['markCity'];
 export const SIZE = { w: 175, d: 45, h: 100 };
@@ -70,12 +71,13 @@ export function build({ key, data, batch, inst, group, rng, pools, isStreetSide,
     batch.add(M.darkMetal, L.wallQuad(x, 8.5, z, sf.nx, sf.nz, 12, 4.6, 0.08), c[0], c[1]);
     S.flatSign(group, x + sf.nx * 0.5, 11.4, z + sf.nz * 0.5, sf.nx, sf.nz, { text: '京王 井の頭線', sub: '渋谷町 → 下北沢 ・ 吉祥寺', w: 8, h: 1.2, bg: '#f7f7f7', fg: '#1a3a8a', emissive: 1.1, weight: '700' });
   }
-  // ---- pedestrian bridge (2F) from the podium's east end to the JR station over the 西口 bus terminal
+  // ---- pedestrian bridge (2F) from the glazed concourse bridge's east end (westDeck.js, over the 西口 bus terminal)
+  //      across the construction yard to the JR station
   const st = CITY && CITY.landmarks.station;
   if (ef && st) {
     const z = 77, x0 = ef.a[0] + ef.tx * ((z - ef.a[1]) / (ef.tz || 1e-6)) , x1 = st.pos[0] - st.size[0] / 2;
-    const ax = Number.isFinite(x0) && Math.abs(x0) < 400 ? x0 - 0.5 : -48, len = x1 - ax, mx = (ax + x1) / 2;
-    const y0 = 6.2, bh = 3.4, bw = 5;
+    void x0; const ax = BRIDGE.x1 - 0.3, len = x1 - ax, mx = (ax + x1) / 2;
+    const y0 = DECK_Y.floor, bh = 3.4, bw = 5;
     // a see-through glazed tube: deck + roof, white spandrel panels to rail height, clear glass above on a 3.2 m
     // mullion grid, a lit ceiling (panel + cross strips every 1.6 m) and commuters inside
     batch.add(M.silver, L.boxAt(mx, y0 - 0.3, z, len, 0.6, bw + 0.4, 0, false), mx, z);
@@ -94,7 +96,7 @@ export function build({ key, data, batch, inst, group, rng, pools, isStreetSide,
       S.ibox(inst, 'lm_commuter', M.innerDark, x, y0 + 0.04, pz, 0.46, ph - 0.24, 0.3);
       S.ibox(inst, 'lm_commuter', M.innerDark, x, y0 + ph - 0.22, pz, 0.22, 0.24, 0.24);
     }
-    for (const x of [ax + 5, -19.3, -3.6, x1 - 5]) {                         // piers: west pavement, platform island, east pavement, yard
+    for (const x of [ax + 14, x1 - 5]) {                                     // piers inside the yard
       batch.add(M.concrete, L.boxAt(x, (y0 - 0.6) / 2, z, 0.8, y0 - 0.6, 0.8, 0, true), x, z);
       colliders.push(S.boxCollider(x, z, 0.9, y0, 0.9));
     }

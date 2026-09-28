@@ -6749,6 +6749,8 @@ function mobPosed(engine, force = null) {
   const h = spawnHero(engine, v, [0, 0, 0], parseFloat(q.get('yaw') || '0') || 0, v === 'kento' && q.get('prop') !== '0' ? 'briefcase' : null);
   if (q.get('prop') === '0') h.setProp(null);
   const clip = q.get('anim') || (force ? 'idle' : 'idle_combat');
+  // walk/run: stand on the ground as in play — planting the frame itself pulls a run's flight phase down into a lunge
+  if ((clip === 'walk' || clip === 'run') && humanoid.getClip && humanoid.getClip('idle')) { h.pose('idle', 0); h.plant(); h.pose(clip, parseFloat(q.get('phase') || '0') || 0); return h; }
   if (humanoid.getClip && humanoid.getClip(clip)) h.pose(clip, parseFloat(q.get('phase') || (force ? '0' : '0.3')) || 0);
   if (!force || !FLOOR_CLIPS.has(clip)) h.plant();
   return h;

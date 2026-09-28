@@ -12,6 +12,9 @@ import {buildMaruyamaVenue} from './maruyamaVenues.js';
 import {KOJI_BUILDINGS} from '../kojiData.js';
 import {buildKojiBuilding} from './koji.js';
 import {STOREFRONT_ADDITIONS} from '../storefrontData.js';
+import {dressRetail} from './retailFronts.js';
+// the two big stores on 文化村通り stand on their real OSM footprints (Street View 2024-12 / 2025-06)
+const RETAIL={136691387:{retail:'discount',retailMain:true},148780539:{retail:'electronics'}};
 
 export function buildScope(ctx){
  const {batch,inst,world,yAt,rng,CITY}=ctx,plan=[],facades=[];
@@ -32,8 +35,10 @@ export function buildScope(ctx){
   });
   const out0=ctx.billboards.length;
   batch.lift=inst.lift=lo;
+  const shop=RETAIL[b.osm];
   const r=buildEdelweiss(b,ctx,lo)||buildKojiBuilding(b,ctx,lo)||buildMusicVenue(b,ctx,lo)||buildMaruyamaVenue(b,ctx,lo)||buildBuilding({id:b.id,poly,storeys:floors,style,faces,gf,sh:floors>1?(b.h-Math.min(4,b.h))/(floors-1):3.3,setback:false,noStairs:true,noRoofClutter:true,groundFloor:residential?'wall':'glass',colliders:'edges',groundRel:(x,z)=>Math.max(0,yAt(x,z)-lo),roofGlow:false}, {...ctx,rng:rng.fork(70000+i),billboards:ctx.billboards});
   batch.lift=inst.lift=0;
+  if(shop){dressRetail({batch,group:ctx.group,field:ctx.field},{id:b.id,poly,...shop},r.height,lo);r.facades.length=0;ctx.billboards.length=out0;}
   for(const col of r.colliders){if(col.obb)col.obb.center.y+=lo;else if(col.min&&col.max){col.min.y+=lo;col.max.y+=lo;}world.addStatic(col,{tag:'building'});}
   for(const f of r.facades){f.position.y+=lo;f.kind='landmark';facades.push(f);}
   for(let k=out0;k<ctx.billboards.length;k++)ctx.billboards[k].position.y+=lo;

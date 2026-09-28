@@ -1,88 +1,160 @@
-// Bunkamura retail fronts, modelled from the stores' official exterior photographs.
-// Original geometry/type only: no downloaded photographs, advertisements or mascot assets.
+// Bunkamura retail fronts after Google Street View (文化村通り, 2024-12 / the MEGA store 2025-06) and Commons photos:
+//  - discount (MEGA ドン・キホーヂ, on its real OSM footprint): white panel body, stacked rounded balcony bands on the
+//    frontage, a huge black band with yellow lettering over the ground floor (SHIBUYA / MEGA / HONTEN 24h), a tall
+//    tax-free banner, a wide-open ground floor packed with goods, floodlit at night;
+//  - electronics (LABY 渋谷, the lots on the real footprint): dark-blue glass on a fine grid, silver frame and a silver
+//    parapet carrying big red letters, coloured vertical banners on the corner, white floor-guide boards, a lit canopy.
+// Original geometry/type only (the game's own parody names, docs/NAMES.md): no photographs, logos or mascots.
 import * as THREE from 'three';
 import * as L from './lib.js';
 import * as S from './shared.js';
 import { groundY } from '../cityData.js';
 
-const displays = new Map();
+const cache = new Map();
+const once = (k, f) => { if (!cache.has(k)) cache.set(k, f()); return cache.get(k); };
+
 function displayMaterial(electronics) {
-  if(displays.has(electronics))return displays.get(electronics);
-  const c=L.makeCanvas(1024,512),g=c.getContext('2d');
-  g.fillStyle=electronics?'#293a50':'#79664b';g.fillRect(0,0,1024,512);
-  // Lit shop interior painted from primitives; no product photographs or brand artwork.
-  g.fillStyle='#eeeadd';g.fillRect(0,0,1024,125);
-  for(let x=24;x<1024;x+=150){g.fillStyle='#ffffff';g.fillRect(x,25,110,13);g.fillStyle='#a9aeb6';g.fillRect(x,65,110,5);}
-  for(let row=0;row<(electronics?1:3);row++){
-    const y=electronics?335:150+row*108;g.fillStyle='#b2b4b6';g.fillRect(0,y+87,1024,10);
-    for(let k=0;k<16;k++){
-      const x=k*64+5;
-      if(electronics){g.fillStyle='#151c27';g.fillRect(x,y,55,65);const gr=g.createLinearGradient(x,y,x+55,y+65);gr.addColorStop(0,['#77b7d9','#aba8d8','#73bcb2'][row]);gr.addColorStop(1,'#243b56');g.fillStyle=gr;g.fillRect(x+3,y+3,49,51);g.fillStyle='#afbac3';g.fillRect(x+21,y+65,14,6);}
-      else{g.fillStyle=['#d94b36','#deb539','#f1e4c7','#79a84c','#387fac','#bd6091'][(k+row*3)%6];g.fillRect(x,y+9+(k%3)*5,43,69-(k%3)*5);g.fillStyle='#fff3d8';g.fillRect(x+6,y+27,31,20);}
-      g.fillStyle='#fbe24b';g.fillRect(x,y+76,48,12);g.fillStyle='#993523';g.font='bold 10px sans-serif';g.fillText(electronics?'SPECIAL':'SALE',x+3,y+86);
+  return once('display' + electronics, () => {
+    const c = L.makeCanvas(1024, 512), g = c.getContext('2d');
+    g.fillStyle = electronics ? '#dfe6ee' : '#f3e7c8'; g.fillRect(0, 0, 1024, 512);
+    // a lit shop interior painted from primitives; no product photographs or brand artwork
+    g.fillStyle = '#ffffff'; for (let x = 24; x < 1024; x += 150) g.fillRect(x, 18, 110, 12);
+    for (let row = 0; row < 3; row++) {
+      const y = 110 + row * 125; g.fillStyle = '#b2b4b6'; g.fillRect(0, y + 96, 1024, 10);
+      for (let k = 0; k < 16; k++) {
+        const x = k * 64 + 5;
+        if (electronics) { g.fillStyle = '#151c27'; g.fillRect(x, y, 55, 70); const gr = g.createLinearGradient(x, y, x + 55, y + 70); gr.addColorStop(0, ['#77b7d9', '#aba8d8', '#73bcb2'][row]); gr.addColorStop(1, '#243b56'); g.fillStyle = gr; g.fillRect(x + 3, y + 3, 49, 56); }
+        else { g.fillStyle = ['#d94b36', '#deb539', '#f1e4c7', '#79a84c', '#387fac', '#bd6091', '#f07f22'][(k + row * 3) % 7]; g.fillRect(x, y + 6 + (k % 3) * 5, 50, 80 - (k % 3) * 5); g.fillStyle = '#fff3d8'; g.fillRect(x + 8, y + 30, 34, 20); }
+        g.fillStyle = electronics ? '#e8303a' : '#fbe24b'; g.fillRect(x, y + 82, 50, 13);
+        g.fillStyle = electronics ? '#ffffff' : '#b0281c'; g.font = 'bold 10px sans-serif'; g.fillText(electronics ? 'POINT' : '驚安', x + 6, y + 93);
+      }
     }
-  }
-  const m=L.signMaterial(c,{emissive:electronics?.45:.7}); displays.set(electronics,m);return m;
+    const m = L.signMaterial(c, { emissive: electronics ? 0.9 : 1.1 }); return m;
+  });
+}
+// white panel body: 3.3 m storey joints, 1.8 m vertical joints; a faint floodlight glow at night
+function whitePanel() {
+  return once('white', () => {
+    const c = L.makeCanvas(128, 128), g = c.getContext('2d');
+    g.fillStyle = '#e9e8e4'; g.fillRect(0, 0, 128, 128);
+    g.fillStyle = '#c9c8c3'; g.fillRect(0, 0, 128, 3); g.fillRect(0, 0, 2, 128); g.fillRect(64, 0, 1, 128);
+    const m = L.std({ map: L.canvasTex(c, { wrap: true }), roughness: 0.62, metalness: 0.05, emissive: 0xfff6e4, emissiveMap: L.canvasTex(c, { wrap: true }) });
+    m.name = 'lm_retailWhite'; S.nightMaterial(m, 0, 0.32);
+    return m;
+  });
+}
+// LABY's glass: navy panels on a fine silver grid; the night map lights whole sales floors white behind it
+function blueGlass() {
+  return once('blueGlass', () => {
+    const c = L.makeCanvas(128, 256), g = c.getContext('2d'), e = L.makeCanvas(128, 256), eg = e.getContext('2d');
+    g.fillStyle = '#1d3f6e'; g.fillRect(0, 0, 128, 256);
+    const gr = g.createLinearGradient(0, 0, 128, 256); gr.addColorStop(0, 'rgba(150,190,235,.35)'); gr.addColorStop(.5, 'rgba(40,80,140,0)'); gr.addColorStop(1, 'rgba(120,170,220,.25)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 256);
+    eg.fillStyle = '#000'; eg.fillRect(0, 0, 128, 256);
+    eg.fillStyle = '#cfe3ff'; eg.fillRect(0, 40, 128, 190); eg.fillStyle = '#ffffff'; eg.fillRect(0, 44, 128, 8);   // sales floor + ceiling lights
+    for (const cv of [g, eg]) { cv.fillStyle = cv === g ? '#aeb6bf' : '#20242a'; for (let x = 0; x < 128; x += 32) cv.fillRect(x, 0, 3, 256); for (let y = 0; y < 256; y += 64) cv.fillRect(0, y, 128, 4); cv.fillRect(0, 230, 128, 26); }
+    const map = L.canvasTex(c, { wrap: true }), emi = L.canvasTex(e, { wrap: true });
+    const m = L.std({ map, emissiveMap: emi, emissive: 0xffffff, roughness: 0.12, metalness: 0.55, envMapIntensity: 1.6 });
+    m.name = 'lm_labyGlass'; S.nightMaterial(m, 0.02, 0.95);
+    return m;
+  });
 }
 function washMaterial() {
- const c=L.makeCanvas(128,256),g=c.getContext('2d'),gr=g.createLinearGradient(0,256,0,0);
- gr.addColorStop(0,'rgba(230,240,255,.72)');gr.addColorStop(.5,'rgba(220,235,255,.22)');gr.addColorStop(1,'rgba(220,235,255,0)');g.fillStyle=gr;g.fillRect(0,0,128,256);
- return new THREE.MeshBasicMaterial({map:L.canvasTex(c),transparent:true,depthWrite:false,blending:THREE.AdditiveBlending,opacity:.45});
+  return once('wash', () => {
+    const c = L.makeCanvas(128, 256), g = c.getContext('2d'), gr = g.createLinearGradient(0, 256, 0, 0);
+    gr.addColorStop(0, 'rgba(255,248,230,.8)'); gr.addColorStop(.55, 'rgba(255,248,230,.25)'); gr.addColorStop(1, 'rgba(255,248,230,0)'); g.fillStyle = gr; g.fillRect(0, 0, 128, 256);
+    const m = new THREE.MeshBasicMaterial({ map: L.canvasTex(c), transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: 0.5 });
+    S.nightMaterial(m, 0, 1); m.name = 'lm_retailWash'; return m;
+  });
 }
-let wash;
-export function dressRetail({batch,group},lot,h,base) {
-  const poly=L.ensureCW(lot.poly), electronics=lot.retail==='electronics';
-  const white=L.std({color:0xd8dadd,roughness:.67,metalness:.14});
-  const glass=L.std({color:0x274a61,roughness:.24,metalness:.38,emissive:0x345c78,emissiveIntensity:.48});
-  const dark=L.std({color:0x20252b,roughness:.5});
-  const metal=L.std({color:0x8f969c,roughness:.44,metalness:.5});
-  const glow=L.std({color:0xe9e5d6,emissive:0xe9e5d6,emissiveIntensity:1.1});
-  for(let i=0;i<poly.length;i++){
-    const a=poly[i],b=poly[(i+1)%poly.length],len=Math.hypot(b[0]-a[0],b[1]-a[1]);
-    const [nx,nz]=L.edgeNormal(poly,i),tx=(b[0]-a[0])/len,tz=(b[1]-a[1])/len;
-    const mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2,rot=Math.atan2(-tz,tx);
-    const face=electronics?nz<-.5:nz>.45;
-    const y=groundY(mx+nx*.2,mz+nz*.2)+.15;
-    const box=(u,cy,w,hh,depth,mat,out=.12)=>{const x=mx+tx*u+nx*out,z=mz+tz*u+nz*out;batch.add(mat,L.boxAt(x,cy,z,w,hh,depth,rot,false),x,z);};
-    const sign=(u,cy,w,hh,text,bg,fg,em=.9)=>S.flatSign(group,mx+tx*u+nx*.78,cy,mz+tz*u+nz*.78,nx,nz,{text,w,h:hh,bg,fg,emissive:em,weight:'800'});
-    const panel=(u,cy,w,hh,material,out=.48)=>{const m=new THREE.Mesh(new THREE.PlaneGeometry(w,hh),material);L.placeFacing(m,mx+tx*u+nx*out,cy,mz+tz*u+nz*out,nx,nz);group.add(m);};
-    const light=(u,cy,color,intensity,distance)=>{const l=new THREE.PointLight(color,intensity,distance,2);l.position.set(mx+tx*u+nx*1.0,cy,mz+tz*u+nz*1.0);group.add(l);};
-    // Cover the procedural window grid; this is a large single retailer, not stacked unrelated tenants.
-    box(0,base+h/2,len,h,.18,white);
-    if(!face)continue;
-    if(electronics){
-      box(0,y+(h-6)/2,len-1,h-6,.15,glass,.24);
-      for(let fy=2;fy<h-7;fy+=3.4){panel(0,y+fy,len-1.2,2.9,displayMaterial(true),.37);box(0,y+fy+1.25,len-1.2,.09,.1,glow,.42);}
-      for(let u=-len/2+1;u<len/2;u+=2)box(u,y+(h-6)/2,.10,h-6,.18,dark,.34);
-      for(let fy=3;fy<h-6;fy+=2)box(0,y+fy,len-1,.13,.18,dark,.34);
-      box(0,base+h-2.8,len,5.6,.16,metal,.23);
-      sign(0,base+h-2.1,len*.72,3.4,'LABY','#d5d8dc','#c82e32');
-      sign(0,base+h-4.7,len*.64,1,'SHIBUYA','#d5d8dc','#214c75');
-      sign(0,y+4.8,len-.8,1.5,'家電・パソコン・スマートフォン','#17497d','#ffffff');
-      sign(-len*.37,y+11,1.65,12,'家電・デジタル','#b92433','#ffffff',1.1);
-      light(0,y+3.2,0xd9eeff,42,12);
-      light(0,base+h-1,0xffdddd,22,9);
-    }else{
-      for(let fy=6;fy<h-1;fy+=1.8)box(0,base+fy,len,.018,.015,metal,.22);
-      for(let u=-len/2+2;u<len/2;u+=3)box(u,base+h/2,.016,h,.015,metal,.22);
-      const entry=Math.min(7,len*.55);
-      box(0,y+2.8,entry,5.6,.2,dark,.25);
-      panel(0,y+2.1,entry-.3,3.8,displayMaterial(false),.4);
-      panel(-len*.34,y+1.65,Math.max(1,len*.17),2.9,displayMaterial(false),.4);
-      box(0,y+3.9,entry-.4,.12,.12,glow,.39);
-      box(0,y+4.9,entry-.4,.12,.3,glow,.37);
-      box(0,y+7.7,len,.07,.2,glow,.42);
-      box(0,y+5.3,len,.07,.2,glow,.42);
-      panel(0,base+h*.57,len-.3,h*.7,wash||(wash=washMaterial()),.32);
-      light(0,y+4.1,0xffe7a1,25,14);
-      light(0,y+9.1,0xe2eeff,18,16);
-      sign(0,y+6.5,len-.3,2.2,'MEGA ドン・キホーヂ','#171d28','#ebca53');
-      sign(0,y+1.3,entry-.7,.7,'食品・日用品・雑貨  24H','#241f1c','#ffffff');
-      if(lot.id.endsWith('_9')){
-        sign(0,base+h-7,Math.min(5,len*.4),10,'SHIBUYA\nNIGHT\nMARKET','#8e354c','#fff2db');
-        // The stepped horizontal reveals on the facade's right side.
-        for(let fy=10;fy<h-1;fy+=3.4){box(len*.34,base+fy,len*.24,.28,.65,white,.45);box(len*.34,base+fy-.2,len*.2,.09,.18,glow,.53);}
+
+// a face is frontage when a carriageway lies within 12 m in front of it
+function frontage(field, mx, mz, nx, nz) {
+  if (!field) return true;
+  for (let d = 1.5; d <= 12; d += 1.5) if (field.sample(mx + nx * d, mz + nz * d) < 0) return true;
+  return false;
+}
+
+export function dressRetail({ batch, group, field }, lot, h, base) {
+  const poly = L.ensureCW(lot.poly), electronics = lot.retail === 'electronics';
+  const M = S.mats();
+  const white = whitePanel(), glass = blueGlass();
+  const dark = L.std({ color: 0x1a1d22, roughness: 0.5 });
+  const metal = L.std({ color: 0xb9bfc6, roughness: 0.38, metalness: 0.55 });
+  const faces = [];
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i], b = poly[(i + 1) % poly.length], len = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    if (len < 0.8) continue;
+    const [nx, nz] = L.edgeNormal(poly, i), tx = (b[0] - a[0]) / len, tz = (b[1] - a[1]) / len;
+    const mx = (a[0] + b[0]) / 2, mz = (a[1] + b[1]) / 2;
+    faces.push({ a, b, len, nx, nz, tx, tz, mx, mz, rot: Math.atan2(-tz, tx), front: len > 4 && frontage(field, mx, mz, nx, nz) });
+  }
+  // the lot's main face: its longest frontage (the big lettering goes there once per store: lot.retailMain)
+  const main = faces.filter(f => f.front).sort((p, q) => q.len - p.len)[0];
+  for (const f of faces) {
+    const { len, nx, nz, tx, tz, mx, mz, rot } = f;
+    const y = groundY(mx + nx * 0.2, mz + nz * 0.2) + 0.15;
+    // u runs left → right as seen from the street (the CW edge tangent runs the other way)
+    const box = (u, cy, w, hh, depth, mat, out = 0.12) => { const x = mx - tx * u + nx * out, z = mz - tz * u + nz * out; batch.add(mat, L.boxAt(x, cy, z, w, hh, depth, rot, false), x, z); };
+    const sign = (u, cy, w, hh, text, bg, fg, em = 0.9, out = 0.78, extra = {}) => S.flatSign(group, mx - tx * u + nx * out, cy, mz - tz * u + nz * out, nx, nz, { text, w, h: hh, bg, fg, emissive: em, weight: '900', ...extra });
+    const panel = (u, cy, w, hh, material, out = 0.48) => { const m = new THREE.Mesh(new THREE.PlaneGeometry(w, hh), material); L.placeFacing(m, mx - tx * u + nx * out, cy, mz - tz * u + nz * out, nx, nz); group.add(m); };
+    const light = (u, cy, color, intensity, distance, out = 2) => { const l = new THREE.PointLight(color, intensity, distance, 2); l.position.set(mx - tx * u + nx * out, cy, mz - tz * u + nz * out); group.add(l); };
+    const top = base + h;
+    // cover the procedural window grid: one large retailer, not stacked unrelated tenants
+    box(0, base + h / 2, len, h, 0.18, electronics && f.front ? glass : white);
+    if (!f.front) continue;
+    const isMain = lot.retailMain && f === main;
+    if (electronics) {
+      // silver frame: parapet band on top, a slim silver pier at each end, floor lines on the grid
+      box(0, top - 2.6, len + 0.2, 5.2, 0.5, metal, 0.3);
+      for (const e of [-1, 1]) box(e * (len / 2 - 0.5), base + h / 2, 1.0, h, 0.5, metal, 0.3);
+      for (let fy = 7.4; fy < h - 5.5; fy += 3.6) box(0, base + fy, len - 1, 0.16, 0.2, metal, 0.3);
+      // ground floor: dark canopy, bright open store, red LABY board over the doors
+      box(0, y + 4.6, len, 0.9, 2.2, dark, 1.1);
+      for (let u = -len / 2 + 1.5; u < len / 2 - 1; u += 2.2) box(u, y + 4.12, 1.2, 0.06, 1.2, M.glowWhite, 1.4);
+      panel(0, y + 2.1, len - 1, 3.9, displayMaterial(true), 0.4);
+      sign(0, y + 4.65, Math.min(len - 2, 9), 0.75, 'LABY  渋谷', '#1a1d22', '#ff3a40', 1.2, 2.25);
+      // white floor-guide boards at 2F, three coloured banners down the left end
+      sign(-len * 0.18, y + 7.2, Math.min(5.5, len * 0.35), 2.6, 'B1 化粧品・医薬品・日用品\n1F スマートフォン・携帯\n2F パソコン・カメラ', '#ffffff', '#1f3e7a', 0.8, 0.45, { weight: '700' });
+      for (const [k, [bg, txt]] of [['#d92632', '家電\nデジタル'], ['#2f9a4a', 'ゲーム\nおもちゃ'], ['#1f6fc0', '免税\nTAX FREE']].entries())
+        sign(-len / 2 + 1.6 + k * 1.5, base + h * 0.55, 1.2, h * 0.5, txt, bg, '#ffffff', 1.1, 0.9);
+      if (isMain) {
+        sign(len * 0.08, top - 2.2, Math.min(len * 0.8, 16), 3.2, 'LABY', '#c7ccd2', '#d8232e', 1.3, 0.6);
+        sign(len * 0.08, top - 4.3, Math.min(len * 0.55, 10), 0.9, 'SHIBUYA', '#c7ccd2', '#1f4c8a', 1.1, 0.6);
+        light(0, top - 1, 0xffd6d6, 30, 12, 3);
       }
+      light(0, y + 3.4, 0xe4f1ff, 55, 14, 2.5);
+    } else {
+      // stacked rounded balcony bands on the right of the frontage, each floor from 3F up
+      const bw = Math.min(len * 0.42, 12), bu = len / 2 - bw / 2 - 0.3;
+      for (let fy = 10; fy < h - 1.5; fy += 3.3) {
+        box(bu, base + fy, bw, 0.34, 1.6, white, 0.95);
+        box(bu, base + fy + 0.55, bw, 0.9, 0.12, white, 1.7);                                   // solid balustrade
+        const ex = mx - tx * (bu - bw / 2) + nx * 0.95, ez = mz - tz * (bu - bw / 2) + nz * 0.95;
+        batch.add(white, S.cylSegment(ex, ez, 0.8, base + fy - 0.17, base + fy + 1.0, 0, Math.PI * 2, 14), ex, ez);   // rounded end
+        box(bu, base + fy - 0.2, bw - 0.4, 0.06, 0.8, M.glowWhite, 0.95);                        // soffit light line
+      }
+      // the huge black band over the ground floor, yellow lettering, a red panel behind MEGA, the round 24h badge
+      const bandW = len - 0.4, bandY = y + 6.1;
+      box(0, bandY, bandW, 3.0, 0.5, dark, 0.55);
+      box(0, bandY + 1.55, bandW, 0.12, 0.55, M.glowYellow, 0.6); box(0, bandY - 1.55, bandW, 0.12, 0.55, M.glowYellow, 0.6);
+      if (isMain) {
+        sign(-bandW * 0.40, bandY, bandW * 0.15, 1.3, 'SHIBUYA', '#111111', '#ffd21e', 1.4, 0.85);
+        sign(-bandW * 0.10, bandY, bandW * 0.40, 2.6, 'MEGA ドン・キホーヂ', '#b3121f', '#ffd21e', 1.6, 0.86);
+        sign(bandW * 0.27, bandY, bandW * 0.28, 2.2, 'HONTEN', '#111111', '#ffd21e', 1.4, 0.85);
+        sign(bandW * 0.45, bandY, 2.1, 2.1, '24h', '#ffd21e', '#111111', 1.4, 0.88);
+        // tall tax-free banner on the left of the upper facade
+        sign(-len * 0.28, base + h * 0.62, Math.min(4.2, len * 0.2), h * 0.52, '日本の\nおみやげ\n\n免税\nTax Free', '#fbe9ee', '#c8202e', 0.9, 0.3);
+        light(-len * 0.28, base + h * 0.62, 0xfff0e0, 26, 16, 5);
+      } else sign(0, bandY, Math.min(bandW * 0.8, 14), 2.2, 'ドン・キホーヂ', '#111111', '#ffd21e', 1.4, 0.85);
+      // ground floor: wide open, goods to the pavement, warm light
+      box(0, y + 2.3, len - 0.4, 4.6, 0.2, dark, 0.2);
+      panel(0, y + 2.2, len - 0.8, 4.1, displayMaterial(false), 0.36);
+      for (let u = -len / 2 + 1.2; u < len / 2 - 1; u += 1.8) box(u, y + 4.35, 1.2, 0.06, 1.2, M.glowWarm, 0.8);
+      sign(0, y + 0.95, Math.min(len - 1, 10), 0.6, '食品・日用品・コスメ・おみやげ  24時間営業', '#241f1c', '#ffffff', 0.9, 0.5, { weight: '700' });
+      // floodlight wash on the white body
+      panel(0, base + h * 0.6, len - 0.3, h * 0.8, washMaterial(), 0.34);
+      light(0, y + 3.2, 0xffe2a0, 55, 16, 2.5);
+      light(0, base + h * 0.75, 0xfff6e8, 28, 20, 6);
     }
   }
 }

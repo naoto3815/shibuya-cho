@@ -1,4 +1,4 @@
-// [city] 渋谷駅前ビル — 9-storey glass block on the south-west corner (道玄坂 × 駅前通り) carrying two stacked LED
+// [city] 渋谷駅前ビル — 9-storey white-panel block (red window frames, Street View 2023-09) on the south-west corner (道玄坂 × 駅前通り) carrying two stacked LED
 // screens on its north-east corner aimed at the crossing (screens from the signage module via anchors.screens).
 import * as THREE from 'three';
 import * as L from './lib.js';
@@ -14,10 +14,20 @@ export function build({ key, data, batch, inst, group, rng, pools, isStreetSide 
   const H = data.size[1], GF = 4.5, SH = (H - GF) / 8;
   const c = L.polyCentroid(poly);
   const colliders = L.edgeColliders(poly, H), facades = [];
-  S.prism(batch, M.glassHikarie, poly, 0, H, { uvScale: 3.5 / SH });
-  S.rings(batch, M.darkMetal, poly, GF, H - 0.5, SH, { out: 0.18, h: 0.28 });
-  S.parapet(batch, M.darkMetal, poly, H, { h: 1.0, t: 0.3 });
-  S.fins(inst, 'lm_finDark', M.darkMetal, poly, GF, H, 3.2, { w: 0.18, d: 0.35 });
+  S.prism(batch, M.panelRedFrame, poly, 0, H, { uvScale: 3.5 / SH });
+  S.rings(batch, M.whiteMetal, poly, GF, H - 0.5, SH, { out: 0.18, h: 0.28 });
+  S.parapet(batch, M.whiteMetal, poly, H, { h: 1.0, t: 0.3 });
+  S.fins(inst, 'lm_finWhite', M.whiteMetal, poly, GF, H, 3.2, { w: 0.18, d: 0.35 });
+  // the 西口 (east) face: a green planted sign band at 2F, the contact-lens banner down the corner, clinic boards
+  const ef = L.bestEdge(poly, 1, 0.1);
+  if (ef) {
+    const r = L.rotYOf(ef.tx, ef.tz), bx = ef.mid[0] + ef.nx * 0.35, bz = ef.mid[1] + ef.nz * 0.35;
+    batch.add(M.hedge, L.boxAt(bx, GF + 1.6, bz, Math.min(ef.len - 4, 20), 2.6, 0.5, r, false), c[0], c[1]);
+    S.flatSign(group, bx + ef.nx * 0.3, GF + 1.6, bz + ef.nz * 0.3, ef.nx, ef.nz, { text: 'サンドラック', sub: 'DRUG  2F', w: 9, h: 1.8, bg: '#1f5a2a', fg: '#ffffff', emissive: 0.9, weight: '900' });
+    const vx = ef.a[0] + ef.tx * 3 + ef.nx * 0.7, vz = ef.a[1] + ef.tz * 3 + ef.nz * 0.7;
+    S.flatSign(group, vx, GF + 8.5, vz, ef.nx, ef.nz, { text: 'コンタクトの\nアイシチィ', w: 2.2, h: 11, bg: '#1f6fc0', fg: '#ffffff', emissive: 1.0, weight: '900' });
+    for (let k = 0; k < 3; k++) S.flatSign(group, ef.b[0] - ef.tx * (2 + k * 2.2) + ef.nx * 0.5, GF + 11 - k * 3.2, ef.b[1] - ef.tz * (2 + k * 2.2) + ef.nz * 0.5, ef.nx, ef.nz, { text: ['消化器内科', '眼科・皮フ科', '歯科 5F'][k], w: 1.9, h: 2.6, bg: '#ffffff', fg: '#b3202a', emissive: 0.7, weight: '800' });
+  }
   const tenants = data.tenants || [];
   let ti = 0;
   for (let i = 0; i < poly.length; i++) {

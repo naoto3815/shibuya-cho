@@ -340,13 +340,18 @@ function P(base, torso, ...arms) { const p = mix(base, torso); for (const a of a
 // the planted foot never slides at timeScale 1; swing: forward arc with knee lift.
 // Phase: right heel strike at 0.25, left at 0.75; 0 = left mid-stance / right leg passing.
 // cycles > 1 lays several identical gait cycles end to end (a longer loop for an upper-body overlay, see pedLoco)
-function locomotionFrames({ dur, speed, stanceFrac, lift, hipDrop, bob, bobPhase = 0, sway, drop, twist, armSwing, elbow, lean, width = 0.12, fps = 60, cycles = 1 }) {
+// Optional run shaping (all default off, so walks and crowd runs are unchanged): off shifts the stance forward/back of the
+// hip (runners land nearly under the body and push off far behind it); heel/heelBack fold the heel up behind the hip early in
+// the swing (heel recovery); knee holds the foot high and forward late in the swing (knee drive); armDrive opens the elbow
+// behind and closes it in front, armBias carries the swing forward of the trunk.
+function locomotionFrames({ dur, speed, stanceFrac, lift, hipDrop, bob, bobPhase = 0, sway, drop, twist, armSwing, elbow, lean, width = 0.12, fps = 60, cycles = 1,
+  off = 0, heel = 0, heelBack = 0, knee = 0, armDrive = 0, armBias = 0, plantedOnly = false }) {
   const frames = [], count = Math.round(dur * cycles * fps) + 1;
   const stepLen = speed * stanceFrac * dur, half = stepLen / 2;
   const footRel = (ph) => {             // ph in [0,1): 0 = heel strike
     if (ph < stanceFrac) {
       const u = ph / stanceFrac;          // contact point z runs +half -> -half at -speed
-      const cz = half - u * stepLen;
+      const cz = half - u * stepLen + off;
       let pitch, ay = ANKLE_Y, az = cz;
       if (u < 0.16) { const k = 1 - u / 0.16, th = 14 * k * D2R; pitch = 14 * k; az = cz + HEEL_Z * (Math.cos(th) - 1) - SOLE_Y * Math.sin(th); ay = ANKLE_Y + HEEL_Z * Math.sin(th) + SOLE_Y * (Math.cos(th) - 1); }   // heel rocker (pivot at the heel)
       else if (u < 0.6) pitch = 0;
@@ -354,13 +359,15 @@ function locomotionFrames({ dur, speed, stanceFrac, lift, hipDrop, bob, bobPhase
       return { z: az, y: ay, pitch, stance: true, u };
     }
     const u = (ph - stanceFrac) / (1 - stanceFrac);       // swing: back -> front
-    const a0 = TOE_OFF * D2R, zStart = -half + TOE_Z * (1 - Math.cos(a0)) + SOLE_Y * Math.sin(a0), yStart = ANKLE_Y + TOE_Z * Math.sin(a0) + SOLE_Y * (Math.cos(a0) - 1);
-    const dz = half - 0.02 - zStart, tSwing = (1 - stanceFrac) * dur;
+    const a0 = TOE_OFF * D2R, zStart = -half + off + TOE_Z * (1 - Math.cos(a0)) + SOLE_Y * Math.sin(a0), yStart = ANKLE_Y + TOE_Z * Math.sin(a0) + SOLE_Y * (Math.cos(a0) - 1);
+    const dz = half + off - 0.02 - zStart, tSwing = (1 - stanceFrac) * dur;
     // Hermite with end slopes matching the stance velocity so the foot has ~zero world velocity at toe-off and touchdown
     const m = -speed * tSwing / dz, s = (1 - m) * u * u * (3 - 2 * u) + m * u;
-    const z = zStart + dz * s;
+    // sin² bumps keep the end velocities, so touchdown and toe-off still match the stance foot
+    const s2 = Math.sin(Math.PI * u) ** 2, early = s2 * (1 - u) ** 1.5 / 0.422, late = s2 * u ** 1.5 / 0.422;
+    const z = zStart + dz * s - heelBack * early;
     const sy = u * u * (3 - 2 * u);
-    const y = yStart * (1 - sy) + (ANKLE_Y + 0.012) * sy + lift * Math.sin(Math.PI * u) * (1 - 0.35 * u);
+    const y = yStart * (1 - sy) + (ANKLE_Y + 0.012) * sy + lift * Math.sin(Math.PI * u) * (1 - 0.35 * u) + heel * early + knee * late;
     const pitch = u < 0.4 ? ease(-38, -4, u / 0.4) : ease(-4, 14, (u - 0.4) / 0.6);
     return { z, y, pitch, stance: false, u };
   };
@@ -377,23 +384,26 @@ function locomotionFrames({ dur, speed, stanceFrac, lift, hipDrop, bob, bobPhase
     f[CH.Spine1 + 1] = -twist * 1.0 * s1; f[CH.Spine2 + 1] = -twist * 0.4 * s1; f[CH.Head + 1] = twist * 0.4 * s1;   // shoulders counter-rotate, head stays on target
     f[CH.Spine1 + 2] = -drop * 0.6 * c1; f[CH.Spine2 + 2] = -drop * 0.4 * c1;
     f[CH.Neck] = -lean * 0.45; f[CH.Head] = -lean * 0.45 - bob * 40 * cb;
-    const aL = armSwing * s1, aR = -armSwing * s1;         // left arm forward with the right leg
+    const aL = armBias + armSwing * s1, aR = armBias - armSwing * s1;         // left arm forward with the right leg
     f[CH.LeftArm] = aL; f[CH.RightArm] = aR;
     f[CH.LeftArm + 2] = 5 + Math.max(0, -aL) * 0.08; f[CH.RightArm + 2] = 5 + Math.max(0, -aR) * 0.08;
     f[CH.LeftArm + 1] = 8; f[CH.RightArm + 1] = 8;
-    f[CH.LeftForeArm] = elbow + Math.max(0, aL) * 0.5; f[CH.RightForeArm] = elbow + Math.max(0, aR) * 0.5;
+    const fore = (a) => armDrive ? elbow + armDrive * (Math.max(0, a) * 0.12 - Math.max(0, -a) * 0.3) : elbow + Math.max(0, a) * 0.5;
+    f[CH.LeftForeArm] = fore(aL); f[CH.RightForeArm] = fore(aR);
     f[CH.LeftShoulder] = aL * 0.15; f[CH.RightShoulder] = aR * 0.15;
     f[CH.LeftHand] = 8; f[CH.RightHand] = 8;
     const cL = CH.ikL, cR = CH.ikR;
     f[cL] = width + (L.stance ? 0 : -0.02 * Math.sin(Math.PI * L.u)); f[cL + 1] = L.y; f[cL + 2] = L.z; f[cL + 3] = L.pitch; f[cL + 4] = 7; f[cL + 5] = 1;
     f[cR] = -width + (R.stance ? 0 : 0.02 * Math.sin(Math.PI * R.u)); f[cR + 1] = R.y; f[cR + 2] = R.z; f[cR + 3] = R.pitch; f[cR + 4] = 7; f[cR + 5] = 1;
-    frames.push({ t, f });
+    frames.push({ t, f, planted: { L: L.stance, R: R.stance } });
   }
   // feasibility: lower the pelvis where a planted leg would otherwise hyper-extend, smoothed loop-aware
   const hipJointY = RIG.joints.LeftUpLeg[1], maxD = (L_THIGH + L_SHIN) * 0.985;
+  // plantedOnly: a leg in the air may fall short of its target (the IK clamps it); only a foot on the ground holds the pelvis down
   const need = frames.map(fr => {
     let y = Infinity;
     for (const s of ['L', 'R']) {
+      if (plantedOnly && !fr.planted[s]) continue;
       const c = CH[LEGS[s].ik];
       const dx = fr.f[c] - (fr.f[CH.hips] + (s === 'L' ? 0.1 : -0.1)), dz = fr.f[c + 2] - fr.f[CH.hips + 2], planar = dx * dx + dz * dz;
       if (planar < maxD * maxD) y = Math.min(y, fr.f[c + 1] + Math.sqrt(maxD * maxD - planar) - hipJointY);
@@ -470,8 +480,13 @@ const BUILDERS = {
       events: [{ time: duration * 0.25, name: 'footstep', foot: 'R', bone: 'RightFoot' }, { time: duration * 0.75, name: 'footstep', foot: 'L', bone: 'LeftFoot' }] });
   },
   run: () => {
-    const frames = locomotionFrames({ dur: DURATIONS.run, speed: RUN_SPEED, stanceFrac: 0.28,
-      lift: 0.23, hipDrop: 0.035, bob: 0.025, bobPhase: 0.18, sway: 0.009, drop: 2, twist: 8, armSwing: 34, elbow: 72, lean: 9, width: 0.10 });
+    // Hero: an athletic run — short contact, a real flight phase, push-off leg long behind, heel folded up then the knee
+    // driven high, elbows near 90° swinging shoulder-to-hip, body tipped forward and chest up. Crowd runs keep the old gait.
+    const frames = locomotionFrames(FIT?.rig?.hero
+      ? { dur: DURATIONS.run, speed: RUN_SPEED, stanceFrac: 0.24, off: -0.08, lift: 0.10, heel: 0.24, heelBack: 0.10, knee: 0.28,
+        hipDrop: 0.02, bob: 0.045, bobPhase: 0.12, sway: 0.008, drop: 3, twist: 10, armSwing: 40, elbow: 86, armDrive: 1, armBias: 2, lean: 13, width: 0.09, plantedOnly: true }
+      : { dur: DURATIONS.run, speed: RUN_SPEED, stanceFrac: 0.28,
+        lift: 0.23, hipDrop: 0.035, bob: 0.025, bobPhase: 0.18, sway: 0.009, drop: 2, twist: 8, armSwing: 34, elbow: 72, lean: 9, width: 0.10 });
     return makeClipFromFrames('run', frames, { speed: RUN_SPEED, stride: RUN_SPEED * DURATIONS.run,
       events: [{ time: DURATIONS.run * 0.25, name: 'footstep', foot: 'R', bone: 'RightFoot' }, { time: DURATIONS.run * 0.75, name: 'footstep', foot: 'L', bone: 'LeftFoot' }] });
   },
