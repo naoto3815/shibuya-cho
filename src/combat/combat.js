@@ -1716,11 +1716,13 @@ const combat = {
     }
     try {
       if (crowd && typeof crowd.gawk === 'function') { if (on) crowd.gawk(centre, 8.5, 18); else if (crowd.releaseGawk) crowd.releaseGawk(); }
+      // the fight's arena (crowd.js fits it to the street and holds everyone in the fight inside it): {x, z, r} or null
+      this.arenaBounds = on && crowd && crowd.arena ? crowd.arena : null;
       const budget = on ? { centre, radius: 60, lod0: 6, lodScale: 0.7 } : null;
       if (crowd && typeof crowd.setCombatBudget === 'function') crowd.setCombatBudget(budget);
       if (props && typeof props.setCombatBudget === 'function') props.setCombatBudget(budget);
     } catch (err) { console.warn('[combat] arena request failed', err); }
-    engine.events.emit('combat:arena', { on: !!on, centre, radius: 8.5, budgetRadius: 60 });
+    engine.events.emit('combat:arena', { on: !!on, centre, radius: this.arenaBounds ? this.arenaBounds.r : 8.5, bounds: this.arenaBounds, budgetRadius: 60 });
   },
 
   /** enemies decide to block on their own (the player's guard is an input flag) */

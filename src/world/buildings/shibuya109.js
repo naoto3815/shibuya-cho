@@ -1,177 +1,100 @@
-// [city] SHIBUYA 1O9 — silver corrugated drum (r 15 m, 10 storeys / 42 m) at the east apex of the wedge podium
-// between 道玄坂 and 文化村通り, storey ledges, slit windows, the white/red "SHIBUYA 1O9" band on floors 9–10,
-// entrance recess + canopy at the tip facing the crossing, 109 Forum Vision frame, vertical blade sign, rooftop
-// plant. Everything static goes through ctx.batch / ctx.inst in WORLD space; the landmark group's origin is the
-// drum centre (signage anchors are relative to it).
+// SHIBUYA109 architectural study; fictional identity SHIBUYA ARC.
+// Photo references are viewed only, never shipped as textures. See docs/reports/109-exterior.md.
 import * as THREE from 'three';
 import * as L from './lib.js';
 import * as S from './shared.js';
-import { buildBuilding, getAtlases, shopQuad } from './genericBuilding.js';
+export const KEYS=['shibuya109'];
+export const SIZE={w:63,d:51,h:42};
 
-export const KEYS = ['shibuya109'];
-export const SIZE = { w: 63, d: 51, h: 42 };
-
-export function build({ key, data, batch, inst, group, rng, pools, isStreetSide, groundRel = null }) {
-  const M = S.mats(), At = getAtlases();
-  const [cx, cz] = data.cylinder.center;
-  const R = data.cylinder.radius;                     // 15
-  const H = data.size[1];                             // 42
-  const SH = 4.2, GF = 4.5;                            // storey / ground floor
-  const [fx, fz] = S.dirOf(data.rotY);                // front direction (toward the crossing)
-  const th0 = Math.atan2(fz, fx);                     // drum angle of the entrance
-  const TAU = Math.PI * 2;
-  const colliders = [], facades = [];
-  // 道玄坂 / 文化村通り climb along the wedge: the base is the lowest point (the apex); ground-floor glass bottoms hug
-  // the rising pavement (groundRel = terrain above the base) and a granite skirt fills the step
-  const hug = (g, y0, off) => {
-    if (!groundRel) return g;
-    const p = g.attributes.position;
-    for (let i = 0; i < p.count; i++) if (Math.abs(p.getY(i) - y0) < 1e-3) p.setY(i, Math.max(y0, groundRel(p.getX(i), p.getZ(i)) + off));
-    return g;
-  };
-
-  // ---- wedge podium (8 storeys ≈ 33.6 m): white panel + ribbon windows, shops at street level, silver ledges
-  const poly = L.ensureCW(data.polygon);
-  const faces = poly.map((a, i) => {
-    const b = poly[(i + 1) % poly.length];
-    const [nx, nz] = L.edgeNormal(poly, i);
-    const street = isStreetSide((a[0] + b[0]) / 2 + nx * 4, (a[1] + b[1]) / 2 + nz * 4);
-    return { kind: street ? 'street' : 'alley', tenants: street ? ['SHIBUYA 1O9', 'UNIQRO', 'WEGA', 'ABC-MARK', 'STARBEANS COFFEE', 'ドトルコーヒー'] : [] };
-  });
-  // on the slope the podium's ground floor grows taller toward the apex (genericBuilding adds the pavement rise to it)
-  const pod = buildBuilding({ id: key, poly, storeys: 8, style: 'office', gf: GF, sh: 4.15, wall: 3, faces, setback: false, noStairs: true, noPipes: true, colliders: 'edges', groundFloor: 'shop', groundRel }, { batch, inst, rng: rng.fork(1), pools, billboards: [] });
-  colliders.push(...pod.colliders);
-  for (const f of pod.facades) { f.kind = 'landmark'; facades.push(f); }
-  S.rings(batch, M.silver, poly, pod.gf, pod.height - 1, 4.15, { out: 0.4, h: 0.4 });
-
-  // ---- the drum
-  const wallSeg = 96;
-  // upper drum wall (floors 2–10) with slit windows every 4.2 m (texture rows are 3.5 m → vScale)
-  batch.add(M.panelSilver, S.cylSegment(cx, cz, R, GF, H, 0, TAU, wallSeg, { metres: true, vScale: 3.5 / SH }), cx, cz);
-  // ground floor: a ring of real shop windows. Each 2.4 m bay between mullions is an interior-mapped shop cell
-  // (fashion rails + mannequins, cosmetics shelves, a café counter; 2.5 m deep in the shader) behind clear glass,
-  // with a lit brand board in the transom above. Bays sample consecutive slices of the atlas wall at true scale.
-  const ea = 0.72;                                                          // entrance half-angle
-  const shopAt = At.shop.cells, PXM = 1008 / 14;                            // atlas: 14 m of shop wall per 1008 px
-  const BRANDS = ['EMOBA', 'LIZ LIZA', 'WEGA', 'dazzlim', 'SPINZ', 'GYBA', 'MURUE', 'ZALA', 'SHIBUYA 1O9', 'CECIL McBEA', 'H&N', 'GO'];
-  const bayUV = (type, k, w) => {
-    const c = shopAt[type] || shopAt.generic, pw = Math.min(900, w * PXM), off = (k * 173) % (1008 - pw);
-    return [c.u + (16 + off) / 4096, c.v0, c.u + (16 + off + pw) / 4096, c.v1];
-  };
-  const shopBay = (th, t1, r, k, types) => {
-    const tm = (th + t1) / 2, c = Math.cos(tm), s = Math.sin(tm), w = 2 * r * Math.sin((t1 - th) / 2) - 0.18;
-    const x = cx + c * r, z = cz + s * r;
-    const g0 = groundRel ? Math.max(0, groundRel(x + c * 0.9, z + s * 0.9)) : 0;
-    const y0 = 0.15 + g0, hh = Math.min(3.25, GF - 0.45 - y0);
-    if (hh < 1.2) return;
-    batch.add(At.shop.mat, shopQuad(x, y0 + hh / 2, z, c, s, w, hh, 0, bayUV(types[k % types.length], k, w)), cx, cz);
-    const top = y0 + hh + 0.08, bh = Math.min(0.62, GF - 0.25 - top);
-    if (bh > 0.3) { const uv = At.fascia.get(BRANDS[k % BRANDS.length], 109); batch.add(At.fascia.mat, L.wallQuad(x, top + bh / 2, z, c, s, w - 0.3, bh, 0.02, [uv.u0, uv.v0, uv.u1, uv.v1]), cx, cz); }
-  };
-  { let k = 0; for (let th = th0 + ea; th < th0 + TAU - ea - 0.02; th += 0.16, k++) shopBay(th, Math.min(th + 0.16, th0 + TAU - ea), R - 0.3, k, ['fashion', 'fashion', 'drug', 'fashion', 'fashion', 'drug', 'fashion', 'cafe']); }   // 1F: fashion + cosmetics (no generic shelving in a fashion building)
-  batch.add(M.glassClear, hug(S.cylSegment(cx, cz, R, 0.15, GF - 0.1, th0 + ea, th0 + TAU - ea, wallSeg, { metres: true }), 0.15, 0.15), cx, cz);
-  if (groundRel) batch.add(getAtlases().plinth, hug(S.cylSegment(cx, cz, R + 0.06, -0.3, 0.15, th0 + ea, th0 + TAU - ea, wallSeg, { metres: true }), 0.15, 0.17), cx, cz);
-  for (let th = th0 + ea; th < th0 + TAU - ea; th += 0.16) {               // mullions
-    const x = cx + Math.cos(th) * (R - 0.1), z = cz + Math.sin(th) * (R - 0.1);
-    S.ibox(inst, 'lm_mullion', M.darkMetal, x, 0, z, 0.14, GF, 0.3, L.rotYOf(-Math.sin(th), Math.cos(th)));
-  }
-  // entrance recess at the apex: the back of the recess is five chords — shop windows at the ends, three pairs of
-  // automatic glass doors (dark frames, transom, lit lobby behind) in the middle
-  const Ri = R - 4.2;
-  for (let j = 0; j < 5; j++) {
-    const ta = th0 - ea + (2 * ea) * j / 5, tb = th0 - ea + (2 * ea) * (j + 1) / 5, tm = (ta + tb) / 2, c = Math.cos(tm), s = Math.sin(tm);
-    const w = 2 * Ri * Math.sin((tb - ta) / 2), x = cx + c * Ri, z = cz + s * Ri, rot = L.rotYOf(-s, c);
-    batch.add(At.shop.mat, shopQuad(x, 0.15 + 1.6, z, c, s, w - 0.1, 3.2, 0, bayUV('fashion', 40 + j * 3, w)), cx, cz);
-    batch.add(M.silver, L.wallQuad(x, (3.35 + GF) / 2, z, c, s, w, GF - 3.35, 0.01), cx, cz);
-    if (j > 0 && j < 4) {
-      for (const o of [-w / 2 + 0.06, 0, w / 2 - 0.06]) batch.add(M.darkMetal, L.boxAt(x - s * o + c * 0.08, 1.6, z + c * o + s * 0.08, 0.1, 3.0, 0.14, rot, false), cx, cz);   // door stiles
-      batch.add(M.darkMetal, L.boxAt(x + c * 0.08, 3.12, z + s * 0.08, w, 0.22, 0.16, rot, false), cx, cz);                                           // transom
-      batch.add(M.glassClear, L.wallQuad(x, 1.6, z, c, s, w - 0.1, 2.9, 0.12), cx, cz);
-      const uv = At.fascia.get('SHIBUYA 1O9', 109); batch.add(At.fascia.mat, L.wallQuad(x, 3.7, z, c, s, w - 0.4, 0.5, 0.03, [uv.u0, uv.v0, uv.u1, uv.v1]), cx, cz);
-    }
-  }
-  for (const th of [th0 - ea, th0 + ea]) {
-    const c = Math.cos(th), s = Math.sin(th);
-    const inward = th === th0 - ea ? 1 : -1;                                 // wall normal points into the recess
-    const nx = -s * inward, nz = c * inward;
-    batch.add(M.silver, L.quad([cx + Ri * c, 0, cz + Ri * s], [cx + R * c, 0, cz + R * s], [cx + R * c, GF, cz + R * s], [cx + Ri * c, GF, cz + Ri * s], [nx, 0, nz]), cx, cz);
-  }
-  batch.add(M.darkMetal, S.disc(cx, cz, Ri, R, GF - 0.01, { seg: 24, up: false, th0: th0 - ea, th1: th0 + ea }), cx, cz);   // recess ceiling
-  for (let k = -2; k <= 2; k++) { const th = th0 + k * 0.28; S.ibox(inst, 'lm_downlight', M.glowWarm, cx + Math.cos(th) * (R - 2), GF - 0.12, cz + Math.sin(th) * (R - 2), 0.5, 0.1, 0.5); }
-  // canopy slab over the entrance (annular sector r 10.8..18.5)
-  batch.add(M.silver, S.cylSegment(cx, cz, R + 3.5, GF, GF + 0.6, th0 - ea - 0.08, th0 + ea + 0.08, 32, { metres: true }), cx, cz);
-  batch.add(M.silver, S.disc(cx, cz, Ri, R + 3.5, GF + 0.6, { seg: 32, up: true, th0: th0 - ea - 0.08, th1: th0 + ea + 0.08 }), cx, cz);
-  batch.add(M.whiteMetal, S.disc(cx, cz, R, R + 3.5, GF, { seg: 32, up: false, th0: th0 - ea - 0.08, th1: th0 + ea + 0.08 }), cx, cz);
-  for (let k = -2; k <= 2; k++) { const th = th0 + k * 0.3; S.ibox(inst, 'lm_downlight', M.glowWarm, cx + Math.cos(th) * (R + 1.8), GF - 0.1, cz + Math.sin(th) * (R + 1.8), 0.5, 0.1, 0.5); }
-  // entrance fascia lettering on the canopy edge
-  S.flatSign(group, cx + Math.cos(th0) * (R + 3.55), GF + 0.3, cz + Math.sin(th0) * (R + 3.55), Math.cos(th0), Math.sin(th0), { text: 'SHIBUYA 1O9', sub: 'ENTRANCE  10:00 – 21:00', w: 12, h: 0.6, bg: '#b80d28', fg: '#ffffff', emissive: 0.9 });   // red ground: a white one blooms into a bar
-  // storey ledges (none through the sign band on floors 9–10); the drum itself is faintly emissive (floodlit),
-  // so no cove strips — the band and the red trims are the only strong emissives
-  for (let y = GF; y < H - 6.5; y += SH) {
-    batch.add(M.silver, S.cylSegment(cx, cz, R + 0.38, y, y + 0.36, 0, TAU, wallSeg, { metres: true }), cx, cz);
-    batch.add(M.silver, S.disc(cx, cz, R, R + 0.38, y + 0.36, { seg: wallSeg, up: true }), cx, cz);
-    batch.add(M.darkMetal, S.disc(cx, cz, R, R + 0.38, y, { seg: wallSeg, up: false }), cx, cz);
-  }
-  // white band with red lettering (floors 9–10) + red trim lines
-  S.wrapSign(group, { cx, cz, r: R + 0.3, y0: H - 5.6, y1: H - 1.6, th0: th0 - Math.PI, th1: th0 + Math.PI, text: 'SHIBUYA 1O9', bg: '#f0efec', fg: '#c8102e', repeat: 3, emissive: 0.85, weight: '900', seg: wallSeg, letterSpacing: 6 });
-  batch.add(M.glowRed, S.cylSegment(cx, cz, R + 0.34, H - 5.9, H - 5.6, 0, TAU, wallSeg), cx, cz);
-  batch.add(M.glowRed, S.cylSegment(cx, cz, R + 0.34, H - 1.6, H - 1.3, 0, TAU, wallSeg), cx, cz);
-  // parapet + roof + plant
-  batch.add(M.silver, S.cylSegment(cx, cz, R + 0.45, H, H + 1.3, 0, TAU, wallSeg, { metres: true }), cx, cz);
-  batch.add(M.silver, S.disc(cx, cz, R - 0.3, R + 0.45, H + 1.3, { seg: wallSeg, up: true }), cx, cz);
-  const roofPoly = S.arcPoints(cx, cz, R - 0.3, 0, TAU, 40).slice(0, -1);
-  batch.add(S.roofMat(), L.polygonCap(roofPoly, H, 0.25), cx, cz);                                   // membrane roof
-  S.roofPlant(batch, inst, roofPoly, H, { seed: 109, tanks: 2, ac: 7, ducts: 2, rail: true, inset: 2.5 });
-  inst.add('antenna', At.geos.antenna, At.metal, cx + 2, H, cz + 8, 0);
-  // rooftop "109" frame (steel lattice) on the crossing side
-  {
-    const tx = -Math.sin(th0), tz = Math.cos(th0);
-    const px = cx + Math.cos(th0) * (R - 3), pz = cz + Math.sin(th0) * (R - 3);
-    const rot = L.rotYOf(tx, tz);
-    for (const o of [-6, 0, 6]) S.ibox(inst, 'lm_post', M.darkMetal, px + tx * o, H, pz + tz * o, 0.3, 7, 0.3, rot);
-    batch.add(M.darkMetal, L.boxAt(px, H + 6.8, pz, 13.4, 0.3, 0.3, rot, false), cx, cz);
-    S.flatSign(group, px + Math.cos(th0) * 0.3, H + 4.2, pz + Math.sin(th0) * 0.3, Math.cos(th0), Math.sin(th0), { text: '1O9', w: 12, h: 4.6, bg: '#c8102e', fg: '#ffffff', emissive: 1.6, weight: '900', double: true });
-  }
-  // 109 Forum Vision frame (screen itself comes from the signage module via anchors.screen)
-  {
-    const tx = -Math.sin(th0), tz = Math.cos(th0);
-    const rot = L.rotYOf(tx, tz);
-    batch.add(M.darkMetal, L.boxAt(cx + Math.cos(th0) * (R + 0.25), 11.5, cz + Math.sin(th0) * (R + 0.25), 10.8, 6.6, 0.5, rot, false), cx, cz);
-    batch.add(M.glowWhite, L.boxAt(cx + Math.cos(th0) * (R + 0.5), 11.5 - 3.4, cz + Math.sin(th0) * (R + 0.5), 10.8, 0.12, 0.2, rot, false), cx, cz);
-  }
-  // vertical blade "SHIBUYA 1O9" (north side of the entrance, visible from the crossing)
-  {
-    const th = th0 - 0.62;
-    const c = Math.cos(th), s = Math.sin(th);
-    S.blade(batch, cx + c * (R + 1.2), 19, cz + s * (R + 1.2), -s, c, { text: 'SHIBUYA 1O9', w: 1.7, h: 22, bg: '#eeede9', fg: '#c8102e', emissive: 0.9, weight: '900' });
-    for (const y of [9, 19, 29]) batch.add(M.darkMetal, L.boxAt(cx + c * (R + 0.6), y, cz + s * (R + 0.6), 1.3, 0.12, 0.12, L.rotYOf(c, s), false), cx, cz);
-  }
-  // wedge face signs (道玄坂 / 文化村通り)
-  for (const [dir, sub] of [[[0, 1], '道玄坂口'], [[0, -1], '文化村通り口']]) {
-    const e = L.bestEdge(poly, dir[0], dir[1]); if (!e) continue;
-    S.flatSign(group, e.mid[0] + e.nx * 0.35, 27, e.mid[1] + e.nz * 0.35, e.nx, e.nz, { text: 'SHIBUYA 1O9', sub, w: 14, h: 2.6, bg: '#c8102e', fg: '#ffffff', emissive: 1.4, weight: '900' });
-  }
-
-  // ---- colliders: the drum as 16 wall slabs whose outer faces lie on the cylinder (the old two rotated squares
-  //      poked their corners 4–5 m out, onto 道玄坂 and the crossing's pavement) + a core box
-  for (let k = 0; k < 16; k++) {
-    const a = (k + 0.5) / 16 * Math.PI * 2, T = 1.6, ch = 2 * R * Math.sin(Math.PI / 16) * Math.cos(Math.PI / 16);
-    const rr = R * Math.cos(Math.PI / 16) - T / 2;
-    colliders.push({ obb: { center: new THREE.Vector3(cx + Math.cos(a) * rr, H / 2, cz + Math.sin(a) * rr), halfSize: new THREE.Vector3(T / 2, H / 2, ch / 2), rotationY: -a } });
-  }
-  colliders.push({ obb: { center: new THREE.Vector3(cx, H / 2, cz), halfSize: new THREE.Vector3(R * 0.68, H / 2, R * 0.68), rotationY: 0 } });
-
-  // ---- anchors (local to the drum centre)
-  const radial = (r, y) => new THREE.Vector3(Math.cos(th0) * r, y, Math.sin(th0) * r);
-  const anchors = {
-    cylinder: { center: new THREE.Vector3(0, 0, 0), radius: R, height: H },
-    screen: radial(R + 0.6, 11.5), screenNormal: new THREE.Vector3(Math.cos(th0), 0, Math.sin(th0)), screenSize: [9.6, 5.8],
-    band: new THREE.Vector3(0, H - 3.6, 0), bandRadius: R + 0.34, bandHeight: 4.0,
-    entrance: radial(R + 3.7, GF + 0.3), signTop: radial(R + 0.3, H - 3.6),
-    dogenzakaFace: (() => { const e = L.bestEdge(poly, 0, 1); return new THREE.Vector3(e.mid[0] - cx, 27, e.mid[1] - cz); })(),
-    bunkamuraFace: (() => { const e = L.bestEdge(poly, 0, -1); return new THREE.Vector3(e.mid[0] - cx, 27, e.mid[1] - cz); })(),
-  };
-  return { group: new THREE.Group(), origin: [cx, cz], worldSpace: true, colliders, lights: [], anchors, facades };
+export function build({key,data,batch,inst,group,groundRel=null}){
+ const M=S.mats(),[cx,cz]=data.cylinder.center,R=data.cylinder.radius,H=data.size[1];
+ const [fx,fz]=S.dirOf(data.rotY),th=Math.atan2(fz,fx),TAU=Math.PI*2,GF=5.7;
+ const at=(u,v,y)=>new THREE.Vector3(cx+fz*u+fx*v,y,cz-fx*u+fz*v);
+ const add=(m,g)=>batch.add(m,g,cx,cz);
+ const mat=(color,extra={})=>new THREE.MeshStandardMaterial({color,roughness:.55,...extra});
+ const gold=mat('#bca26a',{metalness:.48,roughness:.38,emissive:'#a68b58',emissiveIntensity:.16}),dark=mat('#202328'),pink=mat('#b66791',{emissive:'#95577b',emissiveIntensity:.13}),stone=mat('#969695');
+ // Hand-drawn neutral panel grid: no slit windows, ribbed texture or floor ledges.
+ const cv=L.makeCanvas(512,512),ct=cv.getContext('2d');
+ ct.fillStyle='#b9bfc0';ct.fillRect(0,0,512,512);
+ for(let y=0;y<512;y+=128)for(let x=0;x<512;x+=128){const q=182+Math.floor(L.hash(x,y,109)*12);ct.fillStyle=`rgb(${q},${q+4},${q+5})`;ct.fillRect(x+1,y+1,126,126);ct.strokeStyle='#899294';ct.lineWidth=1;ct.strokeRect(x+.5,y+.5,127,127);}
+ const panel=mat('#ffffff',{map:L.canvasTex(cv,{wrap:true}),metalness:.25,roughness:.56,emissive:'#a8afb1',emissiveIntensity:.17});panel.map.repeat.set(1/5.6,1/5.6);
+ const box=(m,u,v,y,w,h,d)=>{const p=at(u,v,y);add(m,L.boxAt(p.x,p.y,p.z,w,h,d,Math.atan2(fx,fz)));};
+ function beam(u,v,y,u1,v1,y1,r=.07){const a=at(u,v,y),b=at(u1,v1,y1),len=a.distanceTo(b),geo=new THREE.CylinderGeometry(r,r,len,8);geo.applyQuaternion(new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0),b.clone().sub(a).normalize()));geo.translate((a.x+b.x)/2,(a.y+b.y)/2,(a.z+b.z)/2);add(gold,geo);}
+ // Clip the old pointed generic podium behind the cylinder so it cannot fill the entrance.
+ const vOf=p=>(p[0]-cx)*fx+(p[1]-cz)*fz;
+ let poly=[];const original=L.ensureCW(data.polygon);
+ for(let i=0;i<original.length;i++){const a=original[i],b=original[(i+1)%original.length],va=vOf(a)+2.5,vb=vOf(b)+2.5;if(va<=0)poly.push(a);if((va<=0)!==(vb<=0)){const t=va/(va-vb);poly.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t]);}}
+ S.prism(batch,panel,poly,-1,29.5,{cap:true});
+ const colliders=L.edgeColliders(poly,29.5);
+ S.parapet(batch,M.silver,poly,29.5,{h:.55,t:.18});
+ // Side wings have service glazing/louvres and a restrained ground-level frontage.
+ for(let i=0;i<poly.length;i++){
+  const a=poly[i],b=poly[(i+1)%poly.length],len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len<10)continue;
+  const [nx,nz]=L.edgeNormal(poly,i),mx=(a[0]+b[0])/2,mz=(a[1]+b[1])/2,rot=Math.atan2(-(b[1]-a[1]),b[0]-a[0]);
+  for(const y of [8.5,13.5,18.5]){add(dark,L.boxAt(mx+nx*.04,y,mz+nz*.04,len*.72,2.6,.08,rot));for(let k=0;k<7;k++)add(M.silver,L.boxAt(mx+nx*.09,y-1.2+k*.36,mz+nz*.09,len*.72,.05,.08,rot));}
+  const gy=groundRel?Math.max(0,groundRel(mx,mz)):0;
+  add(M.glassDark,L.boxAt(mx+nx*.1,gy+2.1,mz+nz*.1,len*.82,3.8,.1,rot));
+ }
+ // Continuous tiled drum; one recessed technical band near the crown.
+ add(panel,S.cylSegment(cx,cz,R,GF,H,0,TAU,128,{metres:true}));
+ add(dark,S.cylSegment(cx,cz,R+.025,H-8.6,H-8.38,0,TAU,128,{metres:true}));
+ add(M.silver,S.disc(cx,cz,R-.25,R+.06,H,{seg:128,up:true}));
+ add(S.roofMat(),L.polygonCap(S.arcPoints(cx,cz,R-.25,0,TAU,64).slice(0,-1),H));
+ // Solid lower cylinder, interrupted only by the entrance/stair opening.
+ const ea=.86;
+ add(panel,S.cylSegment(cx,cz,R,-1,GF,th+ea,th+TAU-ea,96,{metres:true}));
+ const edge=S.arcPoints(cx,cz,R,th+ea,th+TAU-ea,48);
+ colliders.push(...L.edgeColliders([...edge,[cx,cz]],GF));
+ // Pink recessed portal and neutral dark lobby. No invented cafe/bar counter.
+ const doorV=R-3.6,gy=groundRel?Math.max(0,groundRel(...[at(0,doorV,0).x,at(0,doorV,0).z])):0;
+ box(dark,0,doorV-.55,gy+2.25,7.5,4.5,.15);
+ box(pink,0,doorV,gy+4.7,8.2,1.45,.3);
+ for(const u of [-3.95,3.95])box(pink,u,doorV,gy+2,.38,4,.45);
+ for(const u of [-2.5,-1.25,0,1.25,2.5])box(M.silver,u,doorV+.1,gy+1.9,.055,3.8,.1);
+ box(M.glassClear,0,doorV+.04,gy+1.9,7.5,3.8,.08);
+ box(M.glowWarm,0,doorV-1,gy+3.8,6.5,.08,.3);
+ const dp=at(0,doorV,gy+2);
+ colliders.push({obb:{center:dp,halfSize:new THREE.Vector3(4,2,.2),rotationY:Math.atan2(fx,fz)}});
+ // Right-hand exterior stair: narrow gold treads and paired balustrades.
+ const stairU=5.45,stairV=R+1.1,n=24,depth=6.6,rise=4.6;
+ for(let k=0;k<n;k++)box(gold,stairU,stairV-k*depth/n,gy+(k+1)*rise/n/2,2.25,(k+1)*rise/n,depth/n+.025);
+ for(const u of [stairU-1.14,stairU+1.14]){
+  beam(u,stairV,gy+.95,u,stairV-depth,gy+rise+.95,.045);
+  for(let k=0;k<=6;k++){const v=stairV-depth*k/6,y=gy+rise*k/6;beam(u,v,y,u,v,y+.95,.035);}
+ }
+ // Stairs are dressing, with a solid collision box at their foot (no unsupported traversal).
+ const sp=at(stairU,stairV-depth/2,gy+rise/2);
+ colliders.push({obb:{center:sp,halfSize:new THREE.Vector3(1.13,rise/2,depth/2),rotationY:Math.atan2(fx,fz)}});
+ // Flat, open gold space-frame canopy, no oversized circular slab.
+ const back=R-3.2,front=R+3.1,top=gy+7.1;
+ for(const u of [-5.65,5.65])for(const v of [back,front]){
+  beam(u,v,groundRel?Math.max(0,groundRel(at(u,v,0).x,at(u,v,0).z)):0,u,v,top,.12);
+  const p=at(u,v,top/2);colliders.push({obb:{center:p,halfSize:new THREE.Vector3(.13,top/2,.13),rotationY:0}});
+ }
+ for(let k=0;k<=4;k++){
+  const v=back+(front-back)*k/4;beam(-5.65,v,top,5.65,v,top);beam(-5.65,v,top-.6,5.65,v,top-.6,.055);
+  for(let j=0;j<6;j++){const u=-5.65+j*11.3/6;beam(u,v,top,u+11.3/12,v,top-.6,.045);beam(u+11.3/12,v,top-.6,u+11.3/6,v,top,.045);}
+ }
+ for(let j=0;j<=6;j++){const u=-5.65+j*11.3/6;beam(u,back,top,u,front,top,.055);for(let k=0;k<4;k++)beam(u,back+(front-back)*k/4,top,u+(j<6?11.3/6:-11.3/6),back+(front-back)*(k+1)/4,top,.035);}
+ for(const u of [-4,0,4])box(M.glowWarm,u,back+2,top-.67,.22,.06,.5);
+ box(pink,0,front,top-.18,11.3,1.35,.13);
+ // Original typography, not the 109 logo. Transparent raised-look ARC lettering.
+ function logo(u,v,y,w,h,tag){
+  const c=L.makeCanvas(1024,512),g=c.getContext('2d');g.clearRect(0,0,1024,512);g.textAlign='center';g.font='700 265px Helvetica';g.fillStyle='#ac83ae';g.fillText('ARC',512,296);g.font='500 64px Helvetica';g.fillStyle=tag?'#eef0f0':'#454650';g.fillText('S H I B U Y A',512,408);
+  const m=L.signMaterial(c,{transparent:true,emissive:.7});m.depthWrite=false;const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),m);const p=at(u,v,y);L.placeFacing(mesh,p.x,p.y,p.z,fx,fz);mesh.name='original:SHIBUYA ARC';group.add(mesh);
+ }
+ logo(0,R+.27,H-3.5,8.6,5.1,false);
+ logo(0,front+.1,top-.1,3.5,1.55,true);
+ logo(0,doorV+.2,gy+4.8,3.7,1.6,true);
+ // Original abstract fashion campaign on the lower cylinder (no portraits or copied ads).
+ const ad=L.makeCanvas(1024,1024),g=ad.getContext('2d'),gr=g.createLinearGradient(0,0,1024,1024);gr.addColorStop(0,'#243c58');gr.addColorStop(1,'#785379');g.fillStyle=gr;g.fillRect(0,0,1024,1024);
+ for(let k=0;k<8;k++){g.strokeStyle=k%2?'#cabaaa':'#92bbbe';g.lineWidth=18;g.beginPath();g.arc(220+k*82,480,150+k*21,.25,4.5);g.stroke();}
+ g.fillStyle='#f4ece3';g.textAlign='center';g.font='600 92px Helvetica';g.fillText('AFTER HOURS',512,175);g.font='500 36px Helvetica';g.fillText('SHIBUYA ARC  /  AUTUMN COLLECTION',512,900);
+ const am=L.signMaterial(ad,{emissive:.12});add(am,S.cylSegment(cx,cz,R+.045,13.2,27.5,th-.76,th+.76,64,{flipU:true}));
+ // One small service opening below the campaign panel.
+ const vp=at(0,R+.1,11.1);add(dark,L.wallQuad(vp.x,vp.y,vp.z,fx,fz,3.2,.65,0));
+ const light=new THREE.PointLight('#ffe2b8',8,14,2);light.position.copy(at(0,doorV+2,gy+4));
+ const anchors={cylinder:{center:new THREE.Vector3(),radius:R,height:H},entrance:at(0,front,0).sub(new THREE.Vector3(cx,0,cz))};
+ return {group:new THREE.Group(),origin:[cx,cz],worldSpace:true,colliders,lights:[light],anchors,facades:S.facadeRecords(key,poly,29.5,8,{tenants:['SHIBUYA ARC']})};
 }
-
-export default { build, KEYS, SIZE };
+export default {build,KEYS,SIZE};

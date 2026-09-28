@@ -133,8 +133,9 @@ const player = {
       return;
     }
 
-    // ---- attacks (combat module owns hitboxes / timing)
-    if (combat) {
+    // ---- attacks (combat module owns hitboxes / timing). Only in a fight: walking the streets, J / K / click / grab /
+    // heat do nothing (client: 「戦闘シーン以外は、殴るや蹴るをできないようにして」)
+    if (combat && inCombat) {
       if (input.buttons.attack.pressed) {
         const name = this.lightChain[Math.min(this.chainIdx, this.lightChain.length - 1)];
         if (combat.attack(e, name)) { this.chainIdx = (this.chainIdx + 1) % this.lightChain.length; this.chainT = 0.9; this.faceTarget(); e.setState('attack'); return; }

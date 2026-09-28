@@ -87,7 +87,7 @@ export function createStartScreen(engine, menus) {
           engine.state.mode='explore'; engine.state.frozen=false;
           engine.events.emit('story:reveal', {id:'letter'});
           f.dirty=true; document.getElementById('game')?.focus();
-        });
+        }, { fromOpeningVideo: true });
       });
     }
     f.lastSave=performance.now(); if(save)document.getElementById('game')?.focus();

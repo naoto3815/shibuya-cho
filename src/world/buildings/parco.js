@@ -24,7 +24,11 @@ export function build({ key, data, batch, inst, group, rng, pools, isStreetSide 
     S.fins(inst, 'lm_finDark', M.darkMetal, p, Math.max(GF, y0), y1, 2.4, { w: 0.2, d: 0.45, out: 0.05 });
     S.parapet(batch, M.darkMetal, p, y1, { h: 1.2, t: 0.4 });
   }
-  colliders.push(S.obbOf(vols[1][0], 72), S.obbOf(vols[2][0], H));
+  // Upper setbacks begin at their slab, not at street level. Their enclosing
+  // OBBs otherwise blocked the newly walkable Organ-zaka north of the podium.
+  for (const [p,y0,y1] of vols.slice(1)) {
+    const c=S.obbOf(p,y1);c.obb.center.y=(y0+y1)/2;c.obb.halfSize.y=(y1-y0)/2;colliders.push(c);
+  }
   // 立体街路: terrace slabs + lit glass balustrades stepping around the building, one face per level
   const n = poly.length;
   for (let k = 0; k < 14; k++) {

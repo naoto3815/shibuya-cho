@@ -2870,7 +2870,7 @@ for (const [key, h, lift, name] of [
 // bakes or plays (its planted-foot stride measurement then shortens the stride to match, so nothing slides).
 // { walk, run } per scan (a number is both): the long thobe takes half the stride; the knock-kneed schoolgirl a little
 // less than the authored walk and a trot for a run (her skirt's hem, fused to both thighs, is what a full run tears).
-const PED_GAIT = { wandering_photographe_5203: { walk: 0.5, run: 0.5 }, thoughtful_schoolgirl_5927: { walk: 0.7, run: 0.3 } };
+const PED_GAIT = { high_school_student_5828: { walk: 0.82, run: 0.65 }, wandering_photographe_5203: { walk: 0.5, run: 0.5 }, thoughtful_schoolgirl_5927: { walk: 0.7, run: 0.3 } };
 // The client's 19 PASSERS-BY (docs/PEDS.md): every pedestrian in the game is one of these people. Built offline by
 // assets/peds/pipeline/buildPed.mjs at the rig's own 1.82 m (so every clip lands on its joints) and scaled to the
 // person's real height here. `height` is shoes-and-hair standing height in metres.
@@ -2908,6 +2908,14 @@ const GAIT_LEGS = ['LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase', 'RightUpLe
 // scale the legs' pose about the clip's neutral (the rig's rest: legs plumb) by h.gait, after the mixer has written it.
 // The factor is the walk's, or the run's while a run clip carries the weight (read off the mixer's running actions, as
 // crowdScan.js blends them); `clip` names it outright for a single posed clip.
+// Keep the soles and head fixed while redistributing 8 cm from torso to legs.
+function studentBodyY(y) {
+  if (y <= 0.08 || y >= 1.52) return y;
+  return y + 0.08 * (y <= 0.98 ? (y - 0.08) / 0.90 : (1.52 - y) / 0.54);
+}
+function studentJoints(joints) {
+  return Object.fromEntries(Object.entries(joints).map(([name, p]) => [name, [p[0], studentBodyY(p[1]), p[2]]]));
+}
 export function gaitPose(h, gait = h && h.gait, clip = null) {
   if (!h || !gait) return;
   const gw = typeof gait === 'number' ? gait : gait.walk || 1, gr = typeof gait === 'number' ? gait : gait.run || gw;
@@ -2924,7 +2932,7 @@ export function gaitPose(h, gait = h && h.gait, clip = null) {
   const B = h.bones;
   for (const n of GAIT_LEGS) if (B[n]) B[n].quaternion.slerp(RIG.local[n].quaternion, 1 - g);
   const hp = B.Hips.position, r = RIG.local.Hips.position;
-  hp.x = r.x + (hp.x - r.x) * g; hp.z = r.z + (hp.z - r.z) * g; hp.y = r.y + (hp.y - r.y) * g * g;
+  hp.x = r.x + (hp.x - r.x) * g; hp.z = r.z + (hp.z - r.z) * g; hp.y = r.y + (hp.y - r.y) * g * g + (h.ped === 'high_school_student_5828' ? 0.08 : 0);
 }
 // 30 % toward their own luminance (fix round 1): at full chroma a track top was the loudest thing in any frame
 const CHINPIRA_JACKETS = [0xb1377a, 0xd7c767, 0x51b0cc, 0xbc5341, 0x7856bb];
@@ -4061,7 +4069,7 @@ function loadScanAsset(name, base, file, withRegion, mob = false, cast = null) {
       catch(error){ console.warn('[hero] approved face texture unavailable',error); }
     }
     const V = VARIANTS[name];
-    if (V) { V.joints = json.joints; V.scan = name; }
+    if (V) { V.joints = name === 'ped_high_school_student_5828' ? studentJoints(json.joints) : json.joints; V.scan = name; }
     SC.state = 'ready';
     return SC;
   })().catch((e) => { SC.state = 'failed'; console.warn(`[humanoid] scan "${name}" unavailable:`, e.message); return null; });
@@ -4131,6 +4139,13 @@ function buildMobBody(V, R, detail, stance, part, SC) {
     heroHeadNormals(geo, shippedNormal);
     heroFaceAttr(geo, SC, part);
     geo.computeBoundingBox(); geo.computeBoundingSphere();
+  }
+  if (V.ped === 'high_school_student_5828') {
+    const position = geo.getAttribute('position').clone();
+    for (let i = 0; i < position.count; i++) position.setY(i, studentBodyY(position.getY(i)));
+    geo.setAttribute('position', position);
+    geo.setAttribute('normal', geo.getAttribute('normal').clone());
+    geo.computeVertexNormals(); geo.computeBoundingBox(); geo.computeBoundingSphere();
   }
   // a pedestrian keeps what she carries (the handbag, the backpack, the cup ride their bones: buildPed.mjs)
   if (V.ped) { if (PED_BONES) pedBoneColours(geo); return { geo, mats: SC.mat, tris: geo.index.count / 3, skin: null }; }

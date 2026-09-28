@@ -94,7 +94,8 @@ export const SIDE_STREETS = [
   { id: 'dg_rambling', name: 'ランブリングストリート', osm: 1110672666, path: [KOBANMAE, [-403.5, 213.3], [-424.2, 195.4], [-431, 181]], width: 8, junction: true },
   { id: 'dg_1chome', name: '道玄坂一丁目', osm: 32621918, path: [KOBANMAE, [-385.4, 235.9], [-366, 258.7]], width: 8, junction: true },
   { id: 'dg_east_svc', name: '道玄坂一丁目', osm: 59075778, path: [KOBANMAE, [-380.1, 214.4], [-360, 211]], width: 7, junction: true },
-  { id: 'dg_urashibuya', name: '裏渋谷通り', osm: 30012066, path: [[-419.6, 239.9], [-426, 241], [-441, 245], [-449, 247]], width: 5.5, oneway: true },
+  // OSM node 694150810 meets Dogenzaka here; do not retract this road mouth.
+  { id: 'dg_urashibuya', name: '裏渋谷通り', osm: 30012066, path: [[-408.1, 238.3], [-420, 240], [-426, 240.7], [-441.1, 245.1], [-449, 247]], width: 5.5, oneway: true, junction: true },
   { id: 'dg_1chome_n', name: '道玄坂一丁目', osm: 968189472, path: [[-434.6, 309.9], [-420, 317.3]], width: 6 },
   { id: 'dg_maruyama_a', name: '円山町', osm: 87250208, path: [[-469.5, 329.4], [-490, 314.3]], width: 4 },
   { id: 'dg_maruyama_b', name: '円山町', osm: 1336649818, path: [[-481.9, 352.8], [-500, 341.3]], width: 4 },

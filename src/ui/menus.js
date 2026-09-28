@@ -19,34 +19,46 @@ const menus = {
         #hud .menus .title .k { font-size:120px; font-weight:900; letter-spacing:.25em; margin-right:-.25em; color:#f3dc8a; text-shadow:0 0 40px rgba(217,180,90,.6), 0 6px 12px #000; }
         #hud .menus .title .r { font-size:22px; letter-spacing:.9em; margin-right:-.9em; color:#d9b45a; margin-top:8px; }
         #hud .menus .title .hint { margin-top:60px; font-size:14px; letter-spacing:.3em; color:#ccc; }
-        #hud .menus .pause { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:34px; background:rgba(0,0,0,.66); pointer-events:auto; }
+        #hud .menus .pause { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:rgba(0,0,0,.66); pointer-events:auto; }
         #hud .menus .pause.on { display:flex; }
-        #hud .menus .pause .k { font-size:64px; font-weight:900; letter-spacing:.4em; margin-right:-.4em; color:#f3dc8a; border-top:2px solid #d9b45a; border-bottom:2px solid #d9b45a; padding:8px 48px; }
+        #hud .menus .pause .k { font-size:40px; font-weight:900; letter-spacing:.4em; margin-right:-.4em; color:#f3dc8a; border-top:2px solid #d9b45a; border-bottom:2px solid #d9b45a; padding:4px 40px; }
         /* 操作方法: two gold-ruled columns of key caps, the way a 龍が如く pause menu lists its controls */
-        #hud .menus .pause .body { display:flex; gap:28px; align-items:stretch; max-width:calc(100vw - 32px); }
-        #hud .menus .pause .mapw { display:flex; flex-direction:column; background:linear-gradient(180deg, rgba(8,8,10,.92), rgba(12,12,16,.8)); border:1px solid rgba(217,180,90,.35); border-top:3px solid #d9b45a; box-shadow:0 10px 30px rgba(0,0,0,.6); padding:12px 14px 10px; }
+        #hud .menus .pause .body { display:flex; gap:16px; align-items:stretch; max-width:calc(100vw - 32px); }
+        #hud .menus .pause .mapw { display:flex; flex-direction:column; background:linear-gradient(180deg, rgba(8,8,10,.92), rgba(12,12,16,.8)); border:1px solid rgba(217,180,90,.35); border-top:3px solid #d9b45a; box-shadow:0 10px 30px rgba(0,0,0,.6); padding:12px 14px 10px; position:relative; }
+        /* zoom: ＋ / － / 全体 over the map's top-right corner; wheel, drag, pinch and +/- keys do the same */
+        #hud .menus .pause .mz { position:absolute; right:22px; top:52px; display:flex; flex-direction:column; gap:6px; align-items:center; }
+        #hud .menus .pause .mz button { width:38px; height:38px; border:1px solid #d9b45a; border-radius:4px; background:rgba(12,10,6,.86); color:#f3dc8a; font:700 20px/1 var(--sans); cursor:pointer; padding:0; }
+        #hud .menus .pause .mz button.fit { width:auto; height:30px; padding:0 8px; font-size:12px; letter-spacing:.1em; }
+        #hud .menus .pause .mz button:hover { background:rgba(60,48,20,.9); }
+        #hud .menus .pause .mz .zl { font:600 11px var(--sans); color:#d9c9a0; text-shadow:0 1px 2px #000; }
         #hud .menus .pause .mh { display:flex; align-items:baseline; gap:14px; margin-bottom:8px; font-family:var(--mincho); color:#d9b45a; letter-spacing:.3em; }
         #hud .menus .pause .mh b { font-size:20px; font-weight:600; } #hud .menus .pause .mh .area { font-size:14px; color:#f1e3bd; letter-spacing:.2em; }
-        #hud .menus .pause canvas.map { display:block; border:1px solid rgba(217,180,90,.25); }
+        #hud .menus .pause canvas.map { display:block; border:1px solid rgba(217,180,90,.25); cursor:grab; touch-action:none; }
+        #hud .menus .pause canvas.map.drag { cursor:grabbing; }
         #hud .menus .pause .legend { display:flex; gap:18px; margin-top:8px; font-size:12px; color:#cfc2a2; letter-spacing:.1em; }
         #hud .menus .pause .legend i { display:inline-block; vertical-align:-2px; margin-right:6px; font-style:normal; }
         #hud .menus .pause .legend .me { width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-bottom:13px solid #fff4d2; }
         #hud .menus .pause .legend .obj { width:10px; height:10px; background:#f3c94a; transform:rotate(45deg); }
         #hud .menus .pause .legend .sub { width:14px; height:14px; border-radius:50%; background:#c8102e; color:#fff; font-weight:900; font-size:11px; line-height:14px; text-align:center; }
-        #hud .menus .pause .ctl { display:flex; flex-direction:column; gap:14px; padding:26px 44px 22px; background:linear-gradient(180deg, rgba(8,8,10,.92), rgba(12,12,16,.8)); border:1px solid rgba(217,180,90,.35); border-top:3px solid #d9b45a; box-shadow:0 10px 30px rgba(0,0,0,.6); max-width:calc(100vw - 32px); box-sizing:border-box; }
-        #hud .menus .pause .ctl .col { min-width:300px; }
-        #hud .menus .pause .ctl h3 { margin:0 0 12px; font-family:var(--mincho); font-weight:600; font-size:17px; letter-spacing:.4em; color:#d9b45a; border-bottom:1px solid rgba(217,180,90,.35); padding-bottom:6px; }
-        #hud .menus .pause .ctl .row { display:flex; align-items:center; gap:14px; padding:5px 0; font-size:15px; color:#e8dfc8; letter-spacing:.08em; }
-        #hud .menus .pause .ctl .keys { display:flex; align-items:center; gap:4px; flex:0 0 150px; }
+        #hud .menus .pause .ctl { display:flex; flex-direction:column; gap:10px; padding:14px 16px 12px; flex:0 0 290px; width:290px; contain:size; overflow:auto; background:linear-gradient(180deg, rgba(8,8,10,.92), rgba(12,12,16,.8)); border:1px solid rgba(217,180,90,.35); border-top:3px solid #d9b45a; box-shadow:0 10px 30px rgba(0,0,0,.6); max-width:calc(100vw - 32px); box-sizing:border-box; }
+        #hud .menus .pause .side { flex:0 0 290px; width:290px; display:flex; flex-direction:column; gap:10px; min-height:0; }
+        #hud .menus .pause .side .ctl { flex:1 1 auto; min-height:0; }
+        #hud .menus .pause .side .pacts { gap:8px !important; flex-wrap:nowrap !important; }
+        #hud .menus .pause .side .pacts button { flex:1 1 0; padding:10px 4px !important; font-size:13px; letter-spacing:.08em; white-space:nowrap; }
+        #hud .menus .pause .ctl .col { min-width:0; }   /* contain:size above: the map column sets the height, the list scrolls if it must */
+        #hud .menus .pause .ctl h3 { margin:0 0 12px; font-family:var(--mincho); font-weight:600; font-size:14px; letter-spacing:.4em; color:#d9b45a; border-bottom:1px solid rgba(217,180,90,.35); padding-bottom:4px; margin-bottom:6px; }
+        #hud .menus .pause .ctl .row { display:flex; align-items:center; gap:8px; padding:3px 0; font-size:13px; color:#e8dfc8; letter-spacing:.04em; }
+        #hud .menus .pause .ctl .keys { display:flex; align-items:center; flex-wrap:wrap; gap:3px; flex:0 0 112px; }
+        #hud .menus .pause .ctl .kc { font-size:11px; padding:1px 6px; }
         #hud .menus .pause .ctl .keys i { font-style:normal; color:#8a8070; font-size:12px; margin:0 3px; }
         #hud .menus .pause .kc { display:inline-block; min-width:16px; padding:2px 8px; border:1px solid #d9b45a; border-bottom-width:3px; border-radius:4px; background:linear-gradient(180deg,#2a2418,#14110a); color:#f3dc8a; font-family:var(--digits), var(--sans); font-size:13px; font-weight:700; letter-spacing:.05em; text-align:center; line-height:1.4; box-shadow:0 2px 4px rgba(0,0,0,.6); }
         #hud .menus .pause .kc.w { padding:2px 12px; }
         #hud .menus .pause .ctl .note { flex:1; }
-        #hud .menus .pause .ctl .note small { color:#8a8070; margin-left:6px; font-size:12px; }
+        #hud .menus .pause .ctl .note small { display:block; color:#8a8070; font-size:10.5px; letter-spacing:0; }
         #hud .menus .pause .hint { font-size:13px; letter-spacing:.3em; color:#999; }
         #hud .menus .pause .hint .kc { margin:0 4px; }
-        @media (max-width: 1100px) { #hud .menus .pause .body { flex-direction:column; align-items:center; overflow:auto; max-height:calc(100vh - 150px); } }
-        @media (max-width: 760px) { #hud .menus .pause .ctl { flex-direction:column; gap:18px; padding:18px 20px; } #hud .menus .pause .ctl .col { min-width:0; } #hud .menus .pause .k { font-size:40px; } }
+        @media (max-width: 760px) { #hud .menus .pause .body { flex-direction:column; align-items:center; overflow:auto; max-height:calc(100vh - 110px); } }
+        @media (max-width: 760px) { #hud .menus .pause .side { flex:0 0 auto; width:auto; } #hud .menus .pause .ctl { flex:0 0 auto; width:auto; contain:none; } #hud .menus .pause .k { font-size:30px; } }
         #hud .menus .results { position:absolute; left:50%; top:30%; transform:translateX(-50%); font-size:56px; font-weight:900; letter-spacing:.3em; color:#f3dc8a; text-shadow:0 4px 10px #000; opacity:0; transition:opacity .4s; }
         #hud .menus .results.on { opacity:1; }
         #hud .menus .over { position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
@@ -64,17 +76,19 @@ const menus = {
       <div class="title"><div class="k" style="font-size:clamp(36px,7vw,100px)">ツインドラゴン</div><div class="r">TWIN DRAGON</div><div class="hint">WASD 移動 / Shift 走る / J 攻撃 / K 強攻撃 / Space 回避 / R ヒートアクション</div></div>
       <div class="pause"><div class="k">PAUSE</div>
         <div class="body"><div class="mapw"><div class="mh"><b>渋谷町</b><span class="area"></span></div><canvas class="map"></canvas>
+          <div class="mz"><button type="button" data-z="in" aria-label="拡大">＋</button><button type="button" data-z="out" aria-label="縮小">－</button><button type="button" class="fit" data-z="fit" aria-label="全体表示">全体</button><span class="zl">1.0×</span></div>
           <div class="legend"><span><i class="me"></i>現在地</span><span><i class="obj"></i>目的地</span><span><i class="sub">!</i>依頼</span></div></div>
-          <div class="ctl"></div></div><div class="hint"></div></div>
+          <div class="side"><div class="ctl"></div></div></div><div class="hint"></div></div>
       <div class="results"></div>
       <div class="over"><div class="k">敗北</div><div class="r">GAME OVER</div>
         <div class="opt sel" data-i="0">コンティニュー</div><div class="opt" data-i="1">タイトルへ戻る</div>
         <div class="hint">↑↓ 選択　/　Enter・Space・クリック 決定</div></div>`;
     root.appendChild(el);
     this.el = { title: el.querySelector('.title'), pause: el.querySelector('.pause'), ctl: el.querySelector('.pause .ctl'), pauseHint: el.querySelector('.pause .hint'),
-      pmap: el.querySelector('.pause canvas.map'), parea: el.querySelector('.pause .mh .area'),
+      pmap: el.querySelector('.pause canvas.map'), pbody: el.querySelector('.pause .body'), pmapw: el.querySelector('.pause .mapw'), parea: el.querySelector('.pause .mh .area'), pzl: el.querySelector('.pause .mz .zl'),
       results: el.querySelector('.results'), over: el.querySelector('.over'), opts: [...el.querySelectorAll('.over .opt')] };
     this.renderControls(false);
+    this.setupPauseMap(el);
     this.front = createStartScreen(engine, this);
     const actions = document.createElement("div");
     actions.style.cssText = "display:flex;gap:12px;flex-wrap:wrap";
@@ -82,7 +96,8 @@ const menus = {
       const b = document.createElement("button"); b.type = "button"; b.dataset.pausePage = page; b.textContent = label; b.style.cssText = "padding:12px 24px;background:#201b13;color:#f3dc8a;border:1px solid #d9b45a;cursor:pointer";
       b.onclick = () => { if(page === "title") { location.href = location.pathname; return; } this.el.pause.classList.remove("on");this.front.open(page); }; actions.append(b);
     }
-    this.el.pause.append(actions);
+    // desktop: the three buttons sit under the key list in the right column, so the map keeps the height
+    actions.className = 'pacts'; this.el.ctl.after(actions); this.el.pacts = actions;
     // 勝利 comes up once the final blow's slow motion has played out and the camera is back (combat.afterFinale)
     engine.events.on('combat:end', (ev) => {
       if (ev && ev.lost) return;
@@ -223,6 +238,112 @@ const menus = {
     this._ctlPad = pad;
   },
 
+  // ---- the pause map: as big as the screen allows beside a narrow controls column; zoom 1–6× about a point
+  // (＋ / － / 全体, the wheel, +/- keys, pinch) and pan by dragging (client: 「地図は大きくし、右側の操作表は狭く
+  // する。また、地図は拡大、縮小できるようにする」)
+  setupPauseMap(el) {
+    this.mapView = { zoom: 1, cx: null, cz: null };
+    const cv = this.el.pmap;
+    el.querySelector('.pause .mz').addEventListener('click', (ev) => {
+      const z = ev.target.closest('[data-z]'); if (!z) return;
+      const W = this._mapInfo ? this._mapInfo.W : 0, H = this._mapInfo ? this._mapInfo.H : 0;
+      if (z.dataset.z === 'fit') { this.mapView = { zoom: 1, cx: null, cz: null }; this.drawPauseMap(); }
+      else if (z.dataset.z === 'in') this.zoomMapIn(); else this.zoomMapAt(W / 2, H / 2, 1 / 1.5);
+    });
+    cv.addEventListener('wheel', (ev) => { if (!this.paused) return; ev.preventDefault(); this.zoomMapAt(ev.offsetX, ev.offsetY, ev.deltaY < 0 ? 1.25 : 1 / 1.25); }, { passive: false });
+    const pts = new Map();
+    let pinch0 = 0, zoom0 = 1;
+    cv.addEventListener('pointerdown', (ev) => { if (!this.paused) return; try { cv.setPointerCapture(ev.pointerId); } catch (e) {} pts.set(ev.pointerId, [ev.offsetX, ev.offsetY]); cv.classList.add('drag');
+      if (pts.size === 2) { const [a, b] = [...pts.values()]; pinch0 = Math.hypot(a[0] - b[0], a[1] - b[1]); zoom0 = this.mapView.zoom; } });
+    cv.addEventListener('pointermove', (ev) => {
+      const p = pts.get(ev.pointerId); if (!p || !this._mapInfo) return;
+      if (pts.size === 1) {
+        const I = this._mapInfo, V = this.mapView;
+        V.cx = (V.cx != null ? V.cx : I.cx) - (ev.offsetX - p[0]) / I.k; V.cz = (V.cz != null ? V.cz : I.cz) - (ev.offsetY - p[1]) / I.k;
+        pts.set(ev.pointerId, [ev.offsetX, ev.offsetY]); this.drawPauseMap();
+      } else if (pts.size === 2) {
+        pts.set(ev.pointerId, [ev.offsetX, ev.offsetY]);
+        const [a, b] = [...pts.values()], d = Math.hypot(a[0] - b[0], a[1] - b[1]);
+        if (pinch0 > 10) this.zoomMapAt((a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (zoom0 * d / pinch0) / this.mapView.zoom);
+      }
+    });
+    const up = (ev) => { pts.delete(ev.pointerId); if (!pts.size) cv.classList.remove('drag'); };
+    cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up);
+    window.addEventListener('resize', () => { if (this.paused && this.el.pause.classList.contains('on')) { this.fitPauseMap(); this.drawPauseMap(); if (this.clearPauseCredit()) this.drawPauseMap(); } });
+    window.addEventListener('keydown', (ev) => {
+      if (!this.paused || !this._mapInfo) return;
+      const I = this._mapInfo;
+      if (ev.key === '+' || ev.key === '=' || ev.key === ';') this.zoomMapIn();
+      else if (ev.key === '-' || ev.key === '_') this.zoomMapAt(I.W / 2, I.H / 2, 1 / 1.5);
+      else if (ev.key === '0') { this.mapView = { zoom: 1, cx: null, cz: null }; this.drawPauseMap(); }
+    });
+  },
+
+  // the map gets whatever room the pause screen leaves: beside the controls column, under the title, above the
+  // hint and the 設定 / 相関図 / 開始画面へ row — or, on touch, clear of those buttons floating at the right edge.
+  // Measured when the pause opens (and on resize), then kept while zooming and panning.
+  fitPauseMap() {
+    const P = this.el.pause, cv = this.el.pmap, body = this.el.pbody, mapw = this.el.pmapw, acts = this.el.pacts;
+    const ps = getComputedStyle(P), bs = getComputedStyle(body), px = (v) => parseFloat(v) || 0;
+    const side = this.el.ctl.parentElement, sideW = side.offsetWidth;
+    const row = bs.flexDirection !== 'column', ctlW = row && sideW > 0 ? sideW + px(bs.columnGap) : 0;
+    const floatR = acts && getComputedStyle(acts).position === 'absolute';
+    body.style.marginRight = '';
+    const edge = floatR ? Math.max(0, P.getBoundingClientRect().right - px(ps.paddingRight) - acts.getBoundingClientRect().left + 10) : 0;
+    if (edge) body.style.marginRight = `${edge}px`;
+    const chromeW = mapw.offsetWidth - cv.offsetWidth, chromeH = mapw.offsetHeight - cv.offsetHeight;
+    const W = Math.min(window.innerWidth - 32, P.clientWidth - px(ps.paddingLeft) - px(ps.paddingRight) - edge) - chromeW - ctlW;
+    let rest = px(ps.paddingTop) + px(ps.paddingBottom), n = 0;
+    for (const c of P.children) {
+      const cs = getComputedStyle(c); if (cs.display === 'none' || cs.position === 'absolute') continue;
+      n++; rest += c === body ? chromeH : c.offsetHeight;
+    }
+    rest += Math.max(0, n - 1) * px(ps.rowGap);
+    this._mapSize = { w: Math.round(Math.max(280, Math.min(1500, W))), h: Math.round(Math.max(160, Math.min(1000, P.clientHeight - rest - 6))) };
+  },
+
+  // the licence credit line shown while paused (hud .credit, bottom-left) must not sit on the map's legend
+  clearPauseCredit() {
+    const hud = this.engine.get('hud'), cr = hud && hud.el && hud.el.credit;
+    if (!cr || !cr.textContent || !this._mapSize || getComputedStyle(cr).display === 'none') return false;
+    const a = cr.getBoundingClientRect();
+    if (a.height <= 0) return false;
+    let over = 0;
+    for (const e of [this.el.pmap, this.el.pmapw.querySelector('.legend')]) {
+      if (!e) continue;
+      const kids = e.children.length ? [...e.children] : [e];           // the legend: only its items count, not the empty row
+      for (const k of kids) { const m = k.getBoundingClientRect(); if (m.right > a.left && m.left < a.right) over = Math.max(over, m.bottom - (a.top - 4)); }
+    }
+    if (over <= 0 || this._mapSize.h - over < 160) return false;
+    this._mapSize.h = Math.round(this._mapSize.h - over);
+    return true;
+  },
+
+  drawPauseMap() {
+    const hud = this.engine.get('hud');
+    if (!hud || !hud.drawWorldMap) return;
+    if (!this._mapSize) this.fitPauseMap();
+    try { this._mapInfo = hud.drawWorldMap(this.el.pmap, this._mapSize, this.mapView); } catch (e) { console.warn('[menus] pause map', e); return; }
+    const I = this._mapInfo; this.mapView.cx = I.zoom > 1 ? I.cx : null; this.mapView.cz = I.zoom > 1 ? I.cz : null;
+    if (this.el.pzl) { this.el.pzl.textContent = `${I.zoom.toFixed(1)}×`; this.el.pzl.parentElement.style.top = `${this.el.pmap.offsetTop + 48}px`; }   // under the N compass
+  },
+
+  // ＋ / + key: from the whole city it closes in on 健人; once zoomed, about the middle of the view
+  zoomMapIn() {
+    const I = this._mapInfo, pl = this.engine.player; if (!I) return;
+    if (I.zoom <= 1.001 && pl) { this.mapView = { zoom: 1.5, cx: pl.position.x, cz: pl.position.z }; this.drawPauseMap(); }
+    else this.zoomMapAt(I.W / 2, I.H / 2, 1.5);
+  },
+
+  // zoom by f about the screen point (sx, sy) of the pause map: the ground under it stays under it
+  zoomMapAt(sx, sy, f) {
+    const I = this._mapInfo; if (!I) return;
+    const wx = I.cx + (sx - I.W / 2) / I.k, wz = I.cz + (sy - I.H / 2) / I.k;
+    const zoom = Math.max(1, Math.min(6, I.zoom * f)), k = I.k0 * zoom;
+    this.mapView = zoom <= 1.001 ? { zoom: 1, cx: null, cz: null } : { zoom, cx: wx - (sx - I.W / 2) / k, cz: wz - (sy - I.H / 2) / k };
+    this.drawPauseMap();
+  },
+
   pause(on) {
     const engine = this.engine;
     if (engine.params?.shot) return;
@@ -232,8 +353,11 @@ const menus = {
     // the whole city with 健人 on it (client: 「Pauseボタンを押すと、マップ全体が表示され、自分が今いるところがわかるように」)
     if (this.paused) {
       const hud = engine.get('hud');
-      const css = Math.max(260, Math.min(640, Math.floor(Math.min(window.innerHeight - 250, window.innerWidth * 0.5))));
-      try { if (hud && hud.drawWorldMap) hud.drawWorldMap(this.el.pmap, css); } catch (e) { console.warn('[menus] pause map', e); }
+      // zoomed in from an earlier pause: open on 健人 again; the whole city otherwise
+      const V = this.mapView, pl = engine.player;
+      if (V.zoom > 1 && pl) { V.cx = pl.position.x; V.cz = pl.position.z; } else { V.cx = V.cz = null; }
+      this.el.pause.classList.add('on');                   // laid out before measuring what room the map has
+      this.fitPauseMap(); this.drawPauseMap(); if (this.clearPauseCredit()) this.drawPauseMap();
       const area = hud && hud.el && hud.el.area;
       this.el.parea.textContent = area ? area.textContent : '';
     }

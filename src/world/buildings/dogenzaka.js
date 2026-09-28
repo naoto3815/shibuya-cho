@@ -13,9 +13,11 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import * as L from './lib.js';
 import * as S from './shared.js';
+import {buildKojiBuilding,dressKojiCentreSide} from './koji.js';
 import { buildBuilding, getAtlases } from './genericBuilding.js';
 import { koban as buildKoban } from './smallLandmarks.js';
 import * as DG from '../dogenzakaData.js';
+import {SCOPE_ROADS} from '../scopeData.js';
 import { MOBILE } from '../../core/mobileProfile.js';
 
 const SW_H = 0.15;
@@ -33,7 +35,17 @@ export function corridorFootprints() {
   const inPoly = (p, poly) => L.pointInPoly(p[0], p[1], poly);
   for (const b of DG.BUILDINGS) {
     const sid = b.id.replace('13113-bldg-', '');
-    const poly = L.ensureCW(b.poly.map((p) => [p[0], p[1]]));
+    let poly = L.ensureCW(b.poly.map((p) => [p[0], p[1]]));
+    // Two old PLATEAU rear walls straddled newly added OSM lanes. Trim only
+    // these rear edges; the detailed Dogenzaka-facing elevations stay in place.
+    const laneId = { '9488':87250166, '9513':275974039 }[sid];
+    if(laneId) for(const r of SCOPE_ROADS.filter(r=>r.osm===laneId)) for(let i=1;i<r.path.length;i++){
+      const a=r.path[i-1],d=r.path[i],len=Math.hypot(d[0]-a[0],d[1]-a[1]);if(len<0.1)continue;
+      let nx=-(d[1]-a[1])/len,nz=(d[0]-a[0])/len;const c=L.polyCentroid(poly);
+      if((c[0]-a[0])*nx+(c[1]-a[1])*nz<0){nx=-nx;nz=-nz;}
+      const off=r.width/2+1.1,trimmed=clipHalf(poly,a[0]+nx*off,a[1]+nz*off,nx,nz);
+      if(trimmed.length>=3&&Math.abs(L.polyArea(trimmed))>15)poly=trimmed;
+    }
     const c = L.polyCentroid(poly);
     // the construction yard and its notch were cleared in 2023 (their PLATEAU / OSM buildings are already filtered)
     if (inPoly(c, DG.WORKS.site) || inPoly(c, DG.WORKS.notch)) continue;
@@ -200,6 +212,13 @@ export function buildDogenzaka(ctx) {
       gusto = gustoSplit(f, CITY);
       if (gusto) { poly = gusto.tower; T = null; }
     }
+    if(['9593','9585','9454'].includes(f.sid)){
+      const lv=siteLevels(poly,yAt);batch.lift=inst.lift=lv.lo;
+      const r=buildKojiBuilding(f,ctx,lv.lo);batch.lift=inst.lift=0;
+      liftOut(r,ctx.billboards,ctx.billboards.length,lv.lo);
+      for(const shape of r.colliders)col(shape);
+      out.plan.push({id:f.id,poly,h:r.height,base:lv.lo,style:'landmark',storeys:f.storeys,corridor:true});out.stats.buildings++;continue;
+    }
     const n = poly.length, LOOK = DG.LOOK[f.sid] || null;
     const up = f.s > 300 || f.side === 'R' && f.s > 150;                   // the upper street (offices / clinics)
     const kind = T ? T.style : gusto ? 'office' :/ホテル/.test(f.name || '') || f.use === 'love_hotel' ? 'hotel' : f.d > 20 ? (f.side === 'L' && f.s > 150 && f.s < 330 ? 'hotel' : 'tenant') : (up ? (f.storeys >= 8 ? 'office' : 'tenant') : (f.storeys >= 6 && hashS(f.sid) < 0.4 ? 'entertainment' : 'tenant'));
@@ -230,14 +249,16 @@ export function buildDogenzaka(ctx) {
       id: f.id, poly, storeys: f.storeys, style, faces, sh, setback: false, seed: bi,
       wall: LOOK && LOOK.wall != null ? LOOK.wall : WALL_OF[kind] != null ? WALL_OF[kind] : [0, 1, 6, 7, 2, 0][Math.floor(k0 * 6)],
       stickers: front && (style === 'tenant' || style === 'entertainment'), noStairs: !front || MOBILE,
-      noRoofClutter: MOBILE && !front, colliders: n > 4 ? 'edges' : undefined,
+      noRoofClutter: MOBILE && !front, colliders: n > 4 || ['9488','9513'].includes(f.sid) ? 'edges' : undefined,
       ...(lv.hi > lv.lo + 0.02 ? { groundRel: (x, z) => yAt(x, z) - lv.lo } : {}),
       ...(kind === 'mall' ? { bigBoard: 1 } : {}),
       ...(!front && MOBILE ? { groundFloor: 'wall' } : {}),
     };
+    if(f.sid==='9534'){spec.noStairs=true;for(let i=0;i<faces.length;i++){const [nx]=L.edgeNormal(poly,i);if(nx<-.6)faces[i]={kind:'blind',tenants:[]};}}
     const nb0 = ctx.billboards.length;
     batch.lift = inst.lift = lv.lo;
     const r = buildBuilding(spec, { batch, inst, rng: rng.fork(9100 + bi), pools: ctx.pools, billboards: ctx.billboards, stairOk: ctx.stairOk, CITY });
+    dressKojiCentreSide(f,ctx,lv.lo);
     batch.lift = inst.lift = 0;
     liftOut(r, ctx.billboards, nb0, lv.lo);
     if (mainI >= 0) { const rec = r.facades.find((q) => q.id === `${f.id}:f${mainI}`); if (rec) rec.tenants = [...gf, ...upN].map((s) => s.replace(/\s*\d+F$|\s+B\d$/, '')); }
@@ -324,8 +345,33 @@ export function buildDogenzaka(ctx) {
   // its materials so it merges into the landmark's draw calls; out of reach (beyond the corridor outline), no colliders
   if (DG.MARKCITY_WING) {
     const { batch } = ctx, wp = L.ensureCW(DG.MARKCITY_WING.poly), top = DG.MARKCITY_WING.top;
-    S.prism(batch, M.panelGrey, wp, -0.5, top, { uvScale: 3.5 / 4.25 });
-    S.rings(batch, M.whiteMetal, wp, 9, top - 0.5, 4.25, { out: 0.35, h: 0.35 });
+    // Keep an actual opening through the west facade for the 4F concourse
+    // and the higher vehicle ramp, instead of drawing a solid wall over both.
+    const entry=clipHalf(wp,-276,0,-1,0),rear=clipHalf(wp,-276,0,1,0);
+    S.prism(batch,M.panelGrey,rear,-.5,top,{uvScale:3.5/4.25});
+    S.prism(batch,M.panelGrey,entry,-.5,15.2,{uvScale:3.5/4.25});
+    S.prism(batch,M.panelGrey,entry,24,top,{uvScale:3.5/4.25});
+    S.rings(batch, M.whiteMetal, wp, 25, top - 0.5, 4.25, { out: 0.35, h: 0.35 });
+    for(const z of [179,191,204])batch.add(M.whiteMetal,L.boxAt(-299,19.6,z,.7,8.8,.7,0,false),-299,z);
+    S.signQuad(batch,-302,23,191,-1,0,{text:'SHIBUYA MARK CITY',w:19,h:1.2,bg:'#e1e4e2',fg:'#235b54',emissive:.55,weight:'700'});
+    S.signQuad(batch,-304,20.6,196,-1,0,{text:'5F バス・駐車場',w:7,h:.8,bg:'#174b55',fg:'#ffffff',emissive:.7});
+    S.signQuad(batch,-304,18.4,186,-1,0,{text:'4F アベニュー入口',w:6,h:.8,bg:'#174b55',fg:'#ffffff',emissive:.7});
+    const accessAsphalt=L.std({color:0x34383b,roughness:.95});
+    // Render the raised vehicle and pedestrian decks independently of terrain.
+    for(let x=-340;x< -278;x+=1){
+      const t=(x+340)/62,t1=(x+341)/62,z=196-t,z1=196-t1;
+      const y=Math.max(ctx.yAt(x,z),15.377+3.6*t)+.025,y1=Math.max(ctx.yAt(x+1,z1),15.377+3.6*t1)+.025;
+      batch.add(accessAsphalt,L.quad([x,y,z-3.5],[x,y,z+3.5],[x+1,y1,z1+3.5],[x+1,y1,z1-3.5],[0,1,0]),x,z);
+      if(x%5===0)batch.add(M.whiteMetal,L.boxAt(x,y+.03,z,2,.03,.1,0,false),x,z);
+    }
+    batch.add(M.whiteMetal,L.boxAt(-303,16.16,187,50,.08,3,0,false),-303,187);
+    const blue=L.std({color:0x326b92,metalness:.55,roughness:.35});
+    batch.add(blue,L.boxAt(-310,20.2,187,42,.16,3.8,0,false),-310,187);
+    // Slender blue portal frames above the pedestrian approach, as in the west entrance reference.
+    for(let x=-330;x<=-290;x+=5){
+      for(const z of [185.3,188.7])batch.add(M.silver,L.boxAt(x,18.2,z,.13,4,.13,0,false),x,z);
+      batch.add(blue,L.boxAt(x,20.2,187,.25,.18,3.8,0,false),x,187);
+    }
     S.parapet(batch, M.whiteMetal, wp, top, { h: 1.2, t: 0.4 });
     out.plan.push({ poly: wp, h: top, base: 0, id: 'dg_markcity_wing', style: 'landmark', storeys: 6, corridor: true });
   }

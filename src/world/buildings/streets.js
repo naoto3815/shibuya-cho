@@ -1,3 +1,4 @@
+import {nearKoji} from '../kojiData.js';
 // [city] Streets from cityData: asphalt ground, raised sidewalks (0.15 m) cut by a signed-distance field of every
 // carriageway (junction fills come for free), granite kerbs, tactile strips, lane paint (centre / edge / dividers,
 // stop lines, arrows), zebra crossings incl. the two diagonal scrambles, manholes, medians, pedestrian-street paving
@@ -11,8 +12,8 @@ const KERB_W = 0.22;        // granite kerb top width
 // The SDF grid: a 900 m square at 1 m (pass 15). Its north-west corner is (−600, −300): the old ±300 m square (same
 // cell lines, so the square's streets come out as before) plus the 道玄坂 corridor to the west / south-west. Only the
 // cells inside the square or the corridor outline (field.live) get pavement, kerbs and tactile / gutter lines.
-const GRID_R = 450;         // half the grid's side (m)
-const GRID_X0 = -600, GRID_Z0 = -300;
+const GRID_R = 625;         // half the grid's side (m)
+const GRID_X0 = -850, GRID_Z0 = -400;
 const STEP = 1;             // grid resolution (m)
 const DECAL_Y = 0.012;      // road decals
 const SW_DECAL_Y = SW_H + 0.006;
@@ -292,7 +293,7 @@ export function buildRoadField(CITY) {
   for (let j = 0; j < W; j++) {
     const z = GRID_Z0 + (j + 0.5) * STEP;
     for (let i = 0; i < W; i++) { const x = GRID_X0 + (i + 0.5) * STEP; if (x >= -300 && x <= 300 && z >= -300 && z <= 300) live[j * W + i] = 1; }
-    const P = CITY.corridor && CITY.corridor.outline;
+    const P = CITY.scope?.outline || (CITY.corridor && CITY.corridor.outline);
     if (!P) continue;
     const xs = [];
     for (let a = 0, b = P.length - 1; a < P.length; b = a++) { const [xa, za] = P[a], [xb, zb] = P[b]; if ((za > z) !== (zb > z)) xs.push(xa + (z - za) / (zb - za) * (xb - xa)); }
@@ -354,7 +355,7 @@ function isoSegments(c, level) {
 // Axis-aligned openings in the ground (CITY.groundHoles: stair / escalator wells going down to the station levels —
 // the Scramble Square アーバン・コア's down escalators, Metro exit 15). The terrain grid and the pavement skip them;
 // the builder that owns the well lines it (walls, floor, steps) and fences it.
-const HOLES = (CITY0) => (CITY0.groundHoles || []).map((h) => ({ x0: h.x0, z0: h.z0, x1: h.x1, z1: h.z1 }));
+const HOLES = (CITY0) => (CITY0.groundHoles || []).map((h) => ({ id:h.id, x0: h.x0, z0: h.z0, x1: h.x1, z1: h.z1 }));
 function subtractHoles(r, holes) {
   let out = [r];
   for (const h of holes) {
@@ -418,6 +419,8 @@ function buildSidewalks(field, batch, M, yAt, world, holes = []) {
   const emitCell = (i, j) => {
     if (i >= N - 1 || j >= N - 1 || !isLive(i, j)) return;
     const c = [corner(i, j), corner(i + 1, j), corner(i + 1, j + 1), corner(i, j + 1)];
+    // Rail cutting owns its pavement and kerbs; none of the street field may bridge the opening.
+    if (holes.some(h => h.id==='shinsen_rail_cutting' && (c[0].x+c[2].x)/2>h.x0 && (c[0].x+c[2].x)/2<h.x1 && (c[0].z+c[2].z)/2>h.z0 && (c[0].z+c[2].z)/2<h.z1)) return;
     const inside = clipLo(c, KERB_W);
     if (inside.length >= 3 && !(holes.length && holes.some((h) => c[0].x >= h.x0 && c[2].x <= h.x1 && c[0].z >= h.z0 && c[2].z <= h.z1))) sw.poly(inside);
     const band = clipHi(clipLo(c, 0), KERB_W);
@@ -549,11 +552,11 @@ function chainSegments(segs) {
 
 /** Ground mesh over ±700 m following yAt: a tensor grid, fine (2 m) over the bounding box of the sloped area. */
 function terrainGeometry(yAt, holes = []) {
-  const E = 700, FINE = 2, MID = 5, COARSE = 25, R = 440, FR = 300;   // 2 m cells inside ±300 m, 5 m on the vistas beyond
+  const E = 950, FINE = 2, MID = 5, COARSE = 25, R = 440, FR = 300;   // 2 m cells inside ±300 m, 5 m on the vistas beyond
   // pass 15: the 道玄坂 corridor runs out to x −590 / z +500: the slope scan reaches it, and the x axis stays fine (2 m)
   // west to −600 (its z rows are fine to +300 and 5 m beyond, where the street runs along z: the profile is linear
   // between the 12 m DEM samples, so 5 m rows leave < 1 cm between the mesh and yAt)
-  const RX0 = -600, RZ1 = 520, FX0 = -600;
+  const RX0 = -840, RZ1 = 560, FX0 = -840;
   let x0 = Infinity, x1 = -Infinity, z0 = Infinity, z1 = -Infinity;
   for (let x = RX0; x <= R; x += 5) for (let z = -R; z <= RZ1; z += 5) if (yAt(x, z) > 0) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
   const axis = (a, b, f0 = -FR) => {
@@ -606,7 +609,7 @@ function terrainGeometry(yAt, holes = []) {
 export const VISTA = { bunkamura: 85 };
 export function vistaRoads(CITY) {
   return CITY.roads.map(r => {
-    const ext = VISTA[r.id]; if (!ext) return r;
+    const ext = CITY.scope ? 0 : VISTA[r.id]; if (!ext) return r;
     const p = r.path, a = p[p.length - 2], b = p[p.length - 1], l = Math.hypot(b[0] - a[0], b[1] - a[1]);
     return { ...r, path: [...p, [b[0] + (b[0] - a[0]) / l * ext, b[1] + (b[1] - a[1]) / l * ext]], vista: true };
   });
@@ -645,7 +648,7 @@ export function buildStreets({ CITY, batch, inst, world, yAt = () => 0, rng, gro
   const { iso, gutterIso } = buildSidewalks(field, batch, M, yAt, world, holes);
   const chains = chainSegments(iso);
   // tactile guidance strips along every kerb (skipping tiny loops)
-  for (const ch of chains) {
+  for (const ch of chains.flatMap(ch=>{const out=[];let run=[];for(let i=0;i<ch.length-1;i++){const a=ch[i],b=ch[i+1];if(nearKoji((a[0]+b[0])/2,(a[1]+b[1])/2)){if(run.length>1)out.push(run);run=[];}else{if(!run.length)run.push(a);run.push(b);}}if(run.length>1)out.push(run);return out;})) {
     if (L.polylineLength(ch) < 6) continue;
     const g = L.ribbon(ch, 0.3, (x, z) => SW_DECAL_Y + yAt(x, z), { uScale: 1 / 0.3 });
     if (g) batch.add(M.tactile, g, ch[0][0], ch[0][1]);
@@ -694,7 +697,7 @@ export function buildStreets({ CITY, batch, inst, world, yAt = () => 0, rng, gro
       const x = p.x - p.dz * side, z = p.z + p.dx * side;
       inst.add('manhole', MANHOLE_GEO, M.manhole, x, DECAL_Y + yAt(x, z), z, rng.range(0, 6.28), 1, 1, 1, null, slopeUp(yAt, x, z));
     }
-    for (const p of L.alongPolyline(r.path, 14, 5)) {
+    for (const p of (r.scope || r.id==='dg_koji' ? [] : L.alongPolyline(r.path, 14, 5))) {
       if (inCrossing(p.x, p.z, 2) || nearCrosswalk(p.x, p.z)) continue;
       const side = rng.range(-half + 1.2, half - 1.2);
       const x = p.x - p.dz * side, z = p.z + p.dx * side;
@@ -845,7 +848,8 @@ export function buildStreets({ CITY, batch, inst, world, yAt = () => 0, rng, gro
   // ---- pedestrian street paving + plazas
   const surfMat = { paving: M.paver, brick: M.brick, stone: M.granite, asphalt: null };
   for (const p of CITY.pedestrianStreets) {
-    const mat = surfMat[p.surface] || M.paver;
+    // Explicit asphalt entries need no raised paving overlay, including lane mouths.
+    const mat = Object.hasOwn(surfMat, p.surface) ? surfMat[p.surface] : M.paver;
     if (!mat) continue;
     const g = L.ribbon(L.resample(p.path, 2), p.width, (x, z) => SW_DECAL_Y + yAt(x, z), { uScale: 1 / 4 });
     if (g) batch.add(mat, g, p.path[0][0], p.path[0][1]);

@@ -14,6 +14,7 @@
 //   city.crowdPaths [{points, width}]   city.crossing {center, radius, corners}   city.plazas   city.getSpawnPoints()
 //   city.field.sample(x, z)  signed distance to the nearest carriageway edge (>0 = sidewalk)
 import * as THREE from 'three';
+import { accessHeight } from './markcityAccess.js';
 import { CITY, groundY, facing } from './cityData.js';
 import * as L from './buildings/lib.js';
 import { buildStreets, setWetFactor, SW_H, vistaRoads } from './buildings/streets.js';
@@ -43,7 +44,8 @@ import * as nonbei from './buildings/nonbei.js';
 import * as centerGai from './buildings/centerGai.js';
 import * as hachiko from './buildings/hachiko.js';
 import * as smallLandmarks from './buildings/smallLandmarks.js';
-import { dressDonki, buildRedevelopment } from './buildings/bunkamura.js';
+import { buildRedevelopment } from './buildings/bunkamura.js';
+import { dressRetail } from './buildings/retailFronts.js';
 import { buildWestExit } from './buildings/westExit.js';
 import { buildEastExit } from './buildings/eastExit.js';
 import { buildUnderTrack } from './buildings/underTrack.js';
@@ -52,6 +54,9 @@ import { tickEscalators } from './buildings/escalator.js';
 import { PRESETS as SHOT_PRESETS } from '../debug/shots.js';
 import { buildDogenzaka, corridorFootprints } from './buildings/dogenzaka.js';
 import * as DG from './dogenzakaData.js';
+import {buildKojiStreet} from './buildings/koji.js';
+import {buildScope} from './buildings/scope.js';
+import {buildUpperWest} from './buildings/upperWest.js';
 
 // Showpiece framings owned by the city (docs/reports/city.md, integration request to foundation): the built-in
 // 'hachiko' looked 53° past the statue, 'centergai' stood 11 m off the street with the gate behind it. Replaced
@@ -139,7 +144,7 @@ const city = {
     const inst = new L.Instancer({ chunk: 240 });
     const ctx = { engine, CITY, materials, rng, batch, inst, world, group, pools: CITY.tenantPools, facades: this.facades, billboards: this.billboards, yAt: groundY, groundRel: null };
     // physics ground = terrain (道玄坂 / 文化村通り slopes) + the sidewalk slab (set by buildStreets)
-    world.groundBase = groundY;
+    world.groundBase = (x,z)=>accessHeight(x,z,groundY(x,z));
     this.ctx = ctx;
     { const ta = performance.now(); getAtlases(); console.info(`[city] atlases ${(performance.now() - ta).toFixed(0)} ms`); }
     S.useBatch(batch);
@@ -167,7 +172,18 @@ const city = {
     for (const blk of CITY.blocks) {
       if (blk.seedBase != null) nB = blk.seedBase;
       const lots = packBlock(blk, rng.fork(nB * 13 + 5), ctx);
-      if (blk.id === 'bunkamura_n') markDonki(lots);
+      if (blk.id === 'bunkamura_n' || blk.id === 'dogenzaka_w1') {
+        for (const lot of lots) {
+          if (['bunkamura_n_0','bunkamura_n_9'].includes(lot.id)) lot.retail = 'discount';
+          if (['dogenzaka_w1_9','dogenzaka_w1_10'].includes(lot.id)) lot.retail = 'electronics';
+          if (lot.retail) {
+            lot.storeys = 7; lot.gf = 4; lot.sh = 3.5;
+            lot.groundFloor = 'wall'; lot.noRoofClutter = true; lot.noStairs = true;
+            lot.setback = false; lot.bigBoard = 0;
+            lot.faces = lot.poly.map(() => ({kind:'blind',tenants:[]}));
+          }
+        }
+      }
       for (const lot of lots) {
         if (corridorDrop(lot.poly)) { dropped.push(lot.id); if (!lot.extra) nB++; continue; }
         if (L.pointInPoly(CG_VISTA.at[0], CG_VISTA.at[1], lot.poly)) cgVistaLot(lot);
@@ -183,7 +199,7 @@ const city = {
         const r = buildBuilding(spec, { batch, inst, rng: rng.fork(lot.extra ? nB * 7 + 7919 + lot.extra : nB * 7 + 11), pools: CITY.tenantPools, billboards: this.billboards, stairOk: ctx.stairOk, CITY });
         batch.lift = inst.lift = 0;
         liftBuilt(r, this.billboards, nb0, lv.lo);
-        if (lot.donki) try { dressDonki({ batch, inst, group }, lot.donki, r.height, lv.lo); } catch (e) { console.error('[city] donki', e); }
+        if (lot.retail) { dressRetail({batch,group},lot,r.height,lv.lo); r.facades.length=0; this.billboards.splice(nb0); }
         for (const col of r.colliders) world.addStatic(col, { tag: 'building' });
         this.facades.push(...r.facades);
         plan.buildings.push({ poly: lot.poly, h: r.height, base: lv.lo, id: lot.id, style: lot.style, storeys: lot.storeys });
@@ -207,13 +223,13 @@ const city = {
     try {
       const r = vistaRoads(CITY).find(q => q.id === 'bunkamura'), p = r.path, a = p[p.length - 2], b = p[p.length - 1], l = segLen(a, b);
       const dx = (b[0] - a[0]) / l, dz = (b[1] - a[1]) / l, cx = b[0] + dx * 24, cz = b[1] + dz * 24;
-      buildRedevelopment({ batch, inst, group }, cx, cz, dx, dz, groundY(cx, cz));
+      if (!CITY.scope) buildRedevelopment({ batch, inst, group }, cx, cz, dx, dz, groundY(cx, cz));
     } catch (e) { console.error('[city] redevelopment', e); }
     // backdrop beyond the map edge along the roads that climb out of it (道玄坂上 / 文化村通り): real infill lots on
     // both sides of the extended carriageway so the vista up the hill is a street, not a void. No colliders (they
     // stand behind the bounds wall).
     batch.clampX = -279;
-    for (const r of vistaRoads(CITY).filter(q => q.vista)) {
+    for (const r of vistaRoads(CITY).filter(q => q.vista && !CITY.scope)) {
       if (VISTA_SEED[r.id] != null) nB = VISTA_SEED[r.id];
       const p = r.path, a = p[p.length - 2], b = p[p.length - 1], l = segLen(a, b);
       const ux = (b[0] - a[0]) / l, uz = (b[1] - a[1]) / l;
@@ -244,6 +260,15 @@ const city = {
       this.corridor = r;
       console.info(`[city] 道玄坂 corridor: ${r.stats.buildings} buildings, ${r.stats.works} works, ${r.stats.trees} trees, ${r.stats.signs} signs, ${r.signals ? r.signals.heads.length : 0} signal heads, ${r.colliders.length} colliders, ${dropped.length} square lots dropped, ${r.stats.ms} ms, sign atlas ${JSON.stringify(S.signAtlasStats().map((q) => +q.used.toFixed(3)))}`);
     } catch (e) { console.error('[city] dogenzaka corridor failed', e); }
+    const expanded = buildScope({...ctx, rng: rng.fork(9401)});
+    const upperWest = buildUpperWest(ctx);
+    plan.buildings.push(...upperWest.plan);
+    this.facades.push(...upperWest.facades);
+    buildKojiStreet(ctx);
+    plan.buildings.push(...expanded.plan);
+    this.facades.push(...expanded.facades);
+    this.scopeStats = expanded.stats;
+    console.info(`[city] scope expansion: ${expanded.stats.buildings} buildings`);
     // ?citypick=x,z[;x,z…]: which infill lots stand at those points (framing / dressing work)
     if (engine.params && engine.params.raw && engine.params.raw.citypick) for (const q of String(engine.params.raw.citypick).split(';')) {
       const [x, z] = q.split(',').map(Number);
@@ -349,7 +374,7 @@ const city = {
     if (engine.params && engine.params.raw && engine.params.raw.cityprobe) this.probe = makeProbe(this, engine);
 
     // ---- consumer interfaces
-    this.roads = CITY.roads.map(r => ({ id: r.id, name: r.name, points: r.path, width: r.width, lanes: r.lanes, sidewalk: r.sidewalk }))
+    this.roads = CITY.roads.map(r => ({ id: r.id, name: r.name, points: r.path, width: r.width, lanes: r.lanes, sidewalk: r.sidewalk, scope: !!r.scope, pedestrian: !!r.pedestrian }))
       .concat(CITY.pedestrianStreets.map(p => ({ id: p.id, name: p.name, points: p.path, width: p.width, pedestrian: true })));
     this.lanes = buildLanes();
     this.crowdPaths = buildCrowdPaths(ctx);
@@ -359,8 +384,8 @@ const city = {
     // corridor's own walls along its outline outside the square (pass 15)
     const B = CITY.bounds / 2 + 10;
     const corr = CITY.corridor && CITY.corridor.outline;
-    world.addStatic(new THREE.Box3(new THREE.Vector3(-B - 30, 0, -B - 30), new THREE.Vector3(B + 30, 60, -B)), { tag: 'bounds' });
-    world.addStatic(new THREE.Box3(new THREE.Vector3(B, 0, -B - 30), new THREE.Vector3(B + 30, 60, B + 30)), { tag: 'bounds' });
+    if (!CITY.scope) world.addStatic(new THREE.Box3(new THREE.Vector3(-B - 30, 0, -B - 30), new THREE.Vector3(B + 30, 60, -B)), { tag: 'bounds' });
+    if (!CITY.scope) world.addStatic(new THREE.Box3(new THREE.Vector3(B, 0, -B - 30), new THREE.Vector3(B + 30, 60, B + 30)), { tag: 'bounds' });
     const inSq = (x, z) => Math.abs(x) < B && Math.abs(z) < B;
     let nWall = 0;
     const wallRun = (a, b, keep) => {
@@ -377,9 +402,13 @@ const city = {
       flush(n);
     };
     const notCorr = (x, z) => !(corr && L.pointInPoly(x, z, corr));
-    wallRun([-B, B], [B, B], notCorr);                                 // south
-    wallRun([-B, -B], [-B, B], notCorr);                               // west: open where the corridor passes
-    if (corr) for (let i = 0; i < corr.length; i++) wallRun(corr[i], corr[(i + 1) % corr.length], (x, z) => !inSq(x - Math.sign(x) * 0.5, z));
+    if (!CITY.scope) wallRun([-B, B], [B, B], notCorr);                                 // south
+    if (!CITY.scope) wallRun([-B, -B], [-B, B], notCorr);                               // west: open where the corridor passes
+    if (!CITY.scope && corr) for (let i = 0; i < corr.length; i++) wallRun(corr[i], corr[(i + 1) % corr.length], (x, z) => !inSq(x - Math.sign(x) * 0.5, z));
+    if (CITY.scope) {
+      const outline = L.offsetPolygon(L.ensureCW(CITY.scope.outline), 8);
+      for (let i = 0; i < outline.length; i++) wallRun(outline[i], outline[(i+1)%outline.length], () => true);
+    }
     this.boundsWalls = nWall;
 
     let tris = 0;
@@ -526,6 +555,10 @@ const city = {
     city_hachiko_statue: { pos: [11.9, 2.7, 45.3], lookAt: [8.0, 1.8, 46.6], fov: 50 },
     city_gate:       { pos: [-14, 1.6, -6], lookAt: [-30, 6, -34], fov: 55 },
     city_moyai:      { pos: [-25, 1.6, 133], lookAt: [-32, 1.6, 140], fov: 50 },
+    scope_overview: { pos: [-265, 920, 240], lookAt: [-265, 0, 40], fov: 62, t: 'day' },
+    scope_shinsen: () => ({pos:[-658,gy(-658,232)+1.8,232],lookAt:[-647.6,gy(-647.6,250.5)+2,250.5],fov:65,t:'day'}),
+    scope_maruyama: () => ({pos:[-463.8,gy(-463.8,82)+1.8,82],lookAt:[-462.9,gy(-462.9,106.2)+2,106.2],fov:65,t:'day'}),
+    scope_north: () => ({pos:[-253,gy(-253,-259.4)+1.8,-259.4],lookAt:[-290,gy(-290,-263)+2,-263],fov:60,t:'day'}),
     city_dogenzaka:  { pos: [-58, 1.7, -4], lookAt: [-175, 22, 24], fov: 55 },
     city_koban_w:    { pos: [-192, 1.6, -138], lookAt: [-204, 3, -150], fov: 55 },
     city_dbg_mouth:  { pos: [-34, 22, -10], lookAt: [-42, 0, -36], fov: 60 },
@@ -987,6 +1020,18 @@ export function packBlock(blk, rng, ctx) {
     lastDepthPrev = lastDepth;
   }
   if (CG) { const b = L.polyBounds(poly); if (CG.path.some(([x, z]) => x > b.x0 - 15 && x < b.x1 + 15 && z > b.z0 - 15 && z < b.z1 + 15)) { fillCgGaps(poly, blk, lots, placed, rng, ctx); splitCgLots(lots); } }
+  // Restore the short Bunkamura frontage omitted by the rectangular lot packer.
+  // Extend the existing lot within its block, keeping the rear service passage open.
+  if (blk.id === 'dogenzaka_w1') {
+    const lot = lots.find(q => q.id === 'dogenzaka_w1_9');
+    if (lot && lot.poly.length === 4) {
+      const q = [lot.poly[0], lot.poly[1], [-195, lot.poly[2][1]], [-193, lot.poly[3][1]]];
+      if (!corridorHit(q) && !roadHit(q, ctx.field, 2) && !keepOutHit(q)) {
+        lot.poly = q;
+        lot.faces[2] = { kind: 'street', tenants: ['若槻ビル'] };
+      }
+    }
+  }
   // side / back faces that ended up exposed (run ends, keep-out cuts, corners) get a real facade instead of a blank
   // party wall: shopfronts when they face a street, windows + a service door when they face a gap or alley
   for (const lot of lots) {
@@ -1080,8 +1125,8 @@ function buildLanes() {
   };
   const ew = chain('-dogenzaka', 'dogenzaka_shita', 'miyamasu');
   const ewR = ew.slice().reverse();
-  add(ew, 2.6, 'ew', ['dogenzaka_shita']); add(ew, 7.0, 'ew', ['dogenzaka_shita']);
-  add(ewR, 2.6, 'ew', ['miyamasu']); add(ewR, 7.0, 'ew', ['miyamasu']);
+  add(ew, 2.6, 'ew', ['dogenzaka_shita']); add(ew, 5.0, 'ew', ['dogenzaka_shita']);
+  add(ewR, 2.6, 'ew', ['miyamasu']); add(ewR, 5.0, 'ew', ['miyamasu']);
   const ns = chain('-koen', 'ekimae_s');
   const nsR = ns.slice().reverse();
   add(ns, 2.8, 'ns', ['koen']); add(nsR, 2.8, 'ns', ['ekimae_s']);
@@ -1092,7 +1137,7 @@ function buildLanes() {
   const tama = road('tamagawa').path;
   add(tama, 2.6, 'meiji'); add(tama, 7.6, 'meiji'); add(tama.slice().reverse(), 2.6, 'meiji'); add(tama.slice().reverse(), 7.6, 'meiji');
   const bunka = road('bunkamura').path;
-  add(bunka, 3.4, 'meiji'); add(bunka.slice().reverse(), 3.4, 'meiji');
+  add(bunka, 2.0, 'meiji'); add(bunka.slice().reverse(), 2.0, 'meiji');
   const ino = road('inokashira').path;
   add(ino, 3.0, 'meiji'); add(ino, -3.0, 'meiji');
   const nishi = road('nishiguchi').path;

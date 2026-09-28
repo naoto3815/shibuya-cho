@@ -1,5 +1,5 @@
 // One continuous descent in the live city; controls unlock only after follow-camera handoff.
-export function playCityArrival(engine, onComplete) {
+export function playCityArrival(engine, onComplete, { fromOpeningVideo = false } = {}) {
   const camera=engine.get('camera'), player=engine.player;
   if(!camera?.cinematic || !player) { onComplete(); return; }
   engine.state.mode='paused';engine.state.frozen=true;engine.state.arrival=true;
@@ -27,6 +27,24 @@ export function playCityArrival(engine, onComplete) {
   window.addEventListener('keydown',key,true);
   for(const event of ['pointerdown','pointerup','mousedown','mouseup'])root.addEventListener(event,e=>e.stopPropagation());
   root.querySelector('button').onclick=skip;
+  if (fromOpeningVideo) {
+    // The approved movie has already descended. Reveal the real follow camera once,
+    // without flying over unfinished city blocks for a second time.
+    root.dataset.arrival = 'ground-handoff';
+    root.querySelector('.arrival-title').style.animationDuration = '2.4s';
+    let elapsed = 0, previous = performance.now();
+    const reveal = now => {
+      if (finished) return;
+      if (!document.hidden) elapsed += Math.min((now - previous) / 1000, .1);
+      previous = now;
+      root.style.backgroundColor = `rgba(0,0,0,${Math.max(0, 1 - elapsed / .65)})`;
+      if (elapsed >= 2.4) { finish(); return; }
+      frame = requestAnimationFrame(reveal);
+    };
+    root.style.backgroundColor = '#000';
+    frame = requestAnimationFrame(reveal);
+    return { finish: skip };
+  }
   camera.cinematic({collide:false,blendOut:.65,
     pos:skyView,lookAt:crossingTarget,fov:44,duration:8,cut:true,curve:'arrival',
     to:{pos:end,lookAt:endTarget,fov},

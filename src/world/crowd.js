@@ -135,6 +135,11 @@ const SIM_DT = 1 / 30, TICK_FULL_D = 20, TICK_OFF_D = 12, PUSH_V = 1.4, STEP_V =
 const FRONT_CLEAR = 0.4, FRONT_SHOP = 0.7;
 // a fight's lines of sight: nobody within LENS_W of the lens → 健人 / a fighting enemy; 健人's personal space PERSONAL_R
 const LENS_W = 0.9, PERSONAL_R = 0.9;
+// a fight's arena: its radius (fitArena: ARENA_RMIN..ARENA_R to the street, up to ARENA_RMAX to hold whoever started
+// the fight), the gallery's front row RING_GAP outside it, how far inside the edge 健人 (room for a held man) and the
+// enemies are kept
+const ARENA_R = 9, ARENA_RMIN = 6.5, ARENA_RMAX = 12, RING_GAP = 0.45, ARENA_MARGIN_P = 0.9, ARENA_MARGIN_E = 0.4;
+const GAWK_SLIDE = 0.4;     // how far round the ring (rad) an onlooker steps out of the fight lens's line of sight
 // the same scan twice within DUP_D of each other, among the people within DUP_NEAR of the lens, is a duplicate
 const DUP_NEAR = 22, DUP_D = 8;
 // the outfits one notices twice (PED_SCANS roles): at most one of each within DUP_NEAR + DUP_CONSP of the lens, and a
@@ -3897,6 +3902,12 @@ const crowd = {
     const engine = this.engine;
     if (!engine) return;
     if (warm) { this.step(dt, t, true); return; }
+    this.clampArena(dt);                                    // (again at render time, after every module: crowdScan.hook)
+    // a fight that stops without its combat:end (a scene taking over the mode) still gives its arena back
+    if (this.gk && this.gk.on) {
+      this._gkOff = engine.state.mode === 'explore' ? (this._gkOff || 0) + dt : 0;
+      if (this._gkOff > 1.5) { this._gkOff = 0; const cb = engine.get('combat'); if (cb && typeof cb.arena === 'function') cb.arena(false); if (this.gk.on) this.releaseGawk(); }
+    }
     const t0 = performance.now();
     this.simDt = Math.min(dt, SIM_DT);                      // (read by docs/reports/crowd-motion.mjs)
     this.step(this.simDt, t, false);
@@ -4056,7 +4067,10 @@ const crowd = {
         }
         if (d > 1e-3) {
           const kk = (ar - d) * Math.min(1, sdt * 6);
-          p.x += dx / d * kk; p.z += dz / d * kk;
+          let ux = dx / d * kk, uz = dz / d * kk;
+          // (an onlooker on the ring flinches back from a fighter, never into the arena)
+          if (p.gawk && this.gk && this.gk.on) { const G = this.gk, rx = p.x - G.x, rz = p.z - G.z, rl = Math.hypot(rx, rz) || 1, ur = (ux * rx + uz * rz) / rl; if (ur < 0) { ux -= rx / rl * ur; uz -= rz / rl * ur; } }
+          p.x += ux; p.z += uz;
           if (!p.stroll && (p.state === 'wait' || p.kind === 'idler')) { p.tx = p.x; p.tz = p.z; turnTo(p, Math.atan2(-dx, -dz), sdt, 5); }
         }
       }
@@ -4781,7 +4795,11 @@ const crowd = {
       }
       if (p.doorPh === 1) {
         p.dfade = 0; p.moving = false;
-        if (p.doorT <= 0) { const a = Math.max(0, p.sA), b = Math.min(p.path.len, p.sB); p.doorPh = 2; p.doorT = 0.8; this.seedOnPath(p, a + rng() * (b - a)); p.lat = p.doorLat; this.placeOnPath(p); }
+        if (p.doorT <= 0) {
+          const a = Math.max(0, p.sA), b = Math.min(p.path.len, p.sB); p.doorPh = 2; p.doorT = 0.8; this.seedOnPath(p, a + rng() * (b - a)); p.lat = p.doorLat; this.placeOnPath(p);
+          // (nobody comes out of a door into a fight's arena: they stay in the shop a while longer)
+          const G = this.gk; if (G && G.on && Math.hypot(p.x - G.x, p.z - G.z) < G.r + 1.5) { p.doorPh = 1; p.doorT = 1.0; p.dfade = 0; }
+        }
         return;
       }
       p.dfade = clamp(1 - p.doorT / 0.8, 0, 1);
@@ -4983,10 +5001,85 @@ const crowd = {
   // in and watches -- phones up filming, arms folded, hands in pockets, a hand over the mouth, pointing, the odd
   // one cheering. The ring is closed (slots are spread evenly by angle rank, so each person takes the slot on
   // their own side) and two or three deep, with the rows interleaved so the back row sees between shoulders.
+  // 2026-09-28 (client: 「戦闘中は、本家と同様に、野次馬などで戦闘シーンを囲い、範囲外に出れないようにする」): a fight is a
+  // fixed arena. fitArena sizes it to the street (ARENA_R, down to ARENA_RMIN where buildings close in, the centre moved
+  // off them; never so small a fighter starts outside it); the gallery stands shoulder to shoulder just outside it
+  // (arenaSlots) and clampArena keeps 健人 and every enemy inside it. Exposed as crowd.arena {x, z, r}.
   gawk(centre, r = 8.5, maxR = 18) {
     if (!centre) return;
-    this.gk = { x: centre.x, z: centre.z, r, maxR, on: true, t: 0, n: 0 };
+    // a story fight staged round an anchor (missions' talk stage) keeps it as the arena's middle
+    const S = this.stageBlock, st = S && Math.hypot(S.x - centre.x, S.z - centre.z) < 3.5;
+    const A = this.fitArena(st ? S.x : centre.x, st ? S.z : centre.z, ARENA_R);
+    this.gk = { x: A.x, z: A.z, r: A.r, maxR, on: true, t: 0, n: 0, slots: null };
+    this.arena = { x: A.x, z: A.z, r: A.r };
     this.recruitGawkers(true);
+  },
+
+  // is (x, z) inside a static collider (a building or shop front when `big`; anything -- a pole, a bench -- otherwise)
+  staticAt(x, z, rad, big) {
+    const W = this.engine.world; if (!W || !W.overlapSphere) return false;
+    const v = this._stV || (this._stV = new THREE.Vector3());
+    v.set(x, (W.groundHeight ? W.groundHeight(x, z) : 0) + 1.0, z);
+    const hits = W.overlapSphere(v, rad, this._stOpt || (this._stOpt = { tags: null }));
+    for (const h of hits) {
+      if (h.tag === 'dynamic' || !h.shape) continue;
+      if (!big) return true;
+      const S = h.shape; if (S.max.x - S.min.x > 2.5 || S.max.z - S.min.z > 2.5) return true;
+    }
+    return false;
+  },
+
+  // the arena for a fight starting round (x0, z0): r0, or less where buildings close in (the centre first stepped off
+  // them, at most 3 m); never inside a building, and never so small that 健人 or an enemy in the fight starts outside it
+  fitArena(x0, z0, r0) {
+    const E = this.engine, en = E.get('enemy'), N = 32;
+    let x = x0, z = z0, r = r0, moved = 0;
+    for (let it = 0; it < 8; it++) {
+      let bx = 0, bz = 0, nb = 0;
+      for (let k = 0; k < N; k++) {
+        const a = k / N * Math.PI * 2, c = Math.cos(a), sn = Math.sin(a);
+        for (const fr of [0.5, 1]) if (this.staticAt(x + c * r * fr, z + sn * r * fr, 0.3, true)) { const w = fr < 1 ? 2 : 1; bx += c * w; bz += sn * w; nb++; }
+      }
+      if (!nb) break;
+      const bl = Math.hypot(bx, bz);
+      if (bl > 0.5 && moved < 3) { const st = Math.min(1.0, 3 - moved); x -= bx / bl * st; z -= bz / bl * st; moved += st; }
+      else if (r > ARENA_RMIN) r = Math.max(ARENA_RMIN, r - 0.75);
+      else break;
+    }
+    // everyone in the fight starts inside it (the clamp would otherwise pull them in)
+    let need = 0;
+    const fighters = [E.player, ...((en && en.list) || []).filter((e) => e.alive && e.aggro)];
+    for (const e of fighters) if (e && e.position) need = Math.max(need, Math.hypot(e.position.x - x, e.position.z - z) + 1.0);
+    r = Math.min(ARENA_RMAX, Math.max(r, need));
+    return { x, z, r };
+  },
+
+  // the gallery's standing spots: shoulder to shoulder just outside the arena, none on a building, a pole, a bench or
+  // a car. Desktop: a full front row at 0.72 m and a second row on the side the fight lens looks at (the far side of
+  // the ring from the lens -- the side the lens is on is behind it, or cleared from its lines of sight anyway);
+  // phones: one row, every 1.2 m all round (the fight lens swings round the whole ring in a fight: a denser side
+  // facing where it looked at the start was the sparse side a few seconds later).
+  arenaSlots(G) {
+    const cam = this.engine.camera, mob = _PEDS < 0.7, out = [], tr = this.engine.get('traffic');
+    const lookA = cam ? Math.atan2(G.z - cam.position.z, G.x - cam.position.x) : 0;
+    const cars = (tr && tr.cars) || [];
+    const onCar = (x, z) => { for (const c of cars) { if (c.x === undefined) continue; if (Math.abs(c.x - x) < 3 && Math.abs(c.z - z) < 3 && Math.hypot(c.x - x, c.z - z) < Math.max(c.l || 4.4, 2) * 0.5 + 0.5) return true; } return false; };
+    for (let row = 0; row < (mob ? 1 : 2); row++) {
+      const R = G.r + RING_GAP + row * 0.7;
+      let a = lookA - Math.PI + (row ? 0.36 / R : 0);
+      while (a < lookA + Math.PI) {
+        const front = Math.abs(wrapPi(a - lookA)) < 1.6;
+        const sp = mob ? 1.2 : row ? 0.95 : 0.72;
+        if (row && !front) { a += sp / R; continue; }
+        // (a spot on a pole, a bench, a rail: the nearest free place a step in front of it or behind it)
+        for (const dr of [0, 0.45, -0.3, 0.9, 1.35]) {
+          const Rr = R + dr, x = G.x + Math.cos(a) * Rr, z = G.z + Math.sin(a) * Rr;
+          if (!this.staticAt(x, z, 0.28, false) && !onCar(x, z)) { out.push({ a: wrapPi(a), rr: Rr, x, z, row, p: null }); break; }
+        }
+        a += sp / R;
+      }
+    }
+    return out;
   },
 
   // combat.js: {centre, radius, lod0, lodScale} on combat:start / heat:action, null on combat:end. The crowd is
@@ -5000,63 +5093,76 @@ const crowd = {
 
   releaseGawk() {
     if (!this.gk) return;
-    this.gk.on = false;
+    this.gk.on = false; this.arena = null;
     for (const p of this.peds) if (p.gawk) { p.gawk.release = true; p.gawk.delay = this.rng.range(0, 1.8); }
   },
 
   recruitGawkers(initial) {
     const G = this.gk, rng = this.rng, peds = this.peds, N = this.count;
     const snap = !!(initial && this.engine.params && this.engine.params.shot);
-    const CAP = 96;
-    // preallocated candidate ring (index, distance, angle) and an index array to sort: this runs every 1.2 s of a
-    // fight and used to allocate an object per pedestrian, then slice and re-sort (fix round 1, GC in the combat preset)
-    const gi = this._gkI || (this._gkI = new Int32Array(N)), gd = this._gkD || (this._gkD = new Float32Array(N)), ga = this._gkA || (this._gkA = new Float32Array(N));
-    let have = 0, m = 0;
-    for (let k = 0; k < N; k++) { const p = peds[k]; if (p.gawk && !p.gawk.release) have++; }
-    if (have >= CAP) return;
-    const reach = initial ? G.maxR + 4 : G.maxR;
+    if (initial || !G.slots) G.slots = this.arenaSlots(G);
+    // someone who has come into the arena since (out of a shop door, off a stage) and finds every spot taken: a place
+    // of their own a step behind the back row, where they are
+    if (!initial) {
+      for (let k = 0; k < N; k++) {
+        const p = peds[k];
+        if (p.gawk || p.police || p.stage || p.queue || p.doorT > 0 || !(p.dfade > 0.05)) continue;
+        const dx = p.x - G.x, dz = p.z - G.z; if (Math.abs(dx) > G.r || Math.abs(dz) > G.r) continue;
+        if (Math.hypot(dx, dz) > G.r - 0.1) continue;
+        const a = Math.atan2(dz, dx), R = G.r + RING_GAP + (_PEDS < 0.7 ? 0.7 : 1.4);
+        const q = { a, rr: R, x: G.x + Math.cos(a) * R, z: G.z + Math.sin(a) * R, row: 2, p };
+        G.slots.push(q); this.makeGawker(p, q, false, false); p.gawk.speed = 2.5; p.gawk.delay = 0; G.n++;
+      }
+    }
+    const free = G.slots.filter((q) => !q.p || !q.p.gawk || q.p.gawk.release);
+    if (!free.length) return;
+    // who may join: anyone near enough (not the police, a preset's cast; a child only to get out of the arena), nearest
+    // first
+    const keyD = this.key, cand = [];
+    const reach = initial ? 70 : G.maxR + 6;
     for (let k = 0; k < N; k++) {
       const p = peds[k];
-      // a child is taken away from a fight, not stood in the front row of the gallery on its own
-      if (p.gawk || p.police || p.child) continue;
+      if (p.gawk || p.police || p.stage || p.queue || p.doorT > 0 || p.qOut) continue;
       const d = Math.hypot(p.x - G.x, p.z - G.z);
-      if (d > reach * 1.45) continue;
-      gd[k] = d; ga[k] = Math.atan2(p.z - G.z, p.x - G.x); gi[m++] = k;
+      if (d > reach) continue;
+      cand.push({ p, d, hid: p.dfade < 0.05 || !!(keyD && keyD[k] >= 1e6) });
     }
-    const idx = gi.subarray(0, m);
-    idx.sort((u, v) => gd[u] - gd[v]);
-    // everyone inside maxR, and the nearest few beyond it when the street was thin
-    let take = 0;
-    while (take < m && take + have < CAP && (gd[idx[take]] <= reach || take < 40)) take++;
-    if (!take) return;
-    const list = idx.subarray(0, take);
-    if (!initial) {
-      // latecomers squeeze into the back rows on their own side
-      for (let k = 0; k < take; k++) { const i = list[k]; this.makeGawker(peds[i], ga[i], 1 + (rng() < 0.5 ? 1 : 0), snap); }
-      G.n += take;
-      return;
+    cand.sort((u, v) => u.d - v.d);
+    const used = new Set();
+    let n = 0;
+    // anyone caught inside the arena (or on its edge) takes the nearest spot first: nobody but the fighters stays in it
+    for (const c of cand) {
+      if (c.d > G.r + 0.3) break;
+      let bq = null, bd = 1e9;
+      for (const q of free) { if (q.p && q.p.gawk && !q.p.gawk.release) continue; const d = Math.hypot(c.p.x - q.x, c.p.z - q.z); if (d < bd) { bd = d; bq = q; } }
+      if (!bq) break;
+      used.add(c); bq.p = c.p; n++;
+      this.makeGawker(c.p, bq, snap, c.hid);                // (one out of view is simply placed behind its spot)
+      c.p.gawk.speed = 2.5; c.p.gawk.delay = Math.min(c.p.gawk.delay, 0.2);   // (out of the fight's way at a hurry)
     }
-    list.sort((u, v) => ga[u] - ga[v]);
-    const n = take, rows = n > 72 ? 4 : n > 40 ? 3 : n > 16 ? 2 : 1;
-    // the even spacing is rotated to the offset that moves people least (circular mean of own - even angle)
-    let sx = 0, sy = 0;
-    for (let k = 0; k < n; k++) { const e = ga[list[k]] - (k / n) * Math.PI * 2; sx += Math.cos(e); sy += Math.sin(e); }
-    const a0 = Math.atan2(sy, sx);
-    for (let k = 0; k < n; k++) {
-      const i = list[k], even = a0 + (k / n) * Math.PI * 2;
-      const a = even + wrapPi(ga[i] - even) * 0.25 + rng.range(-0.05, 0.05);
-      this.makeGawker(peds[i], a, k % rows, snap);
+    // each spot left, around the ring: the nearest person within 14 m of it walks there (the ring is closed in a few
+    // seconds); else someone out of view takes it, coming in from just behind it (faded in as they arrive)
+    let walked = 0, placed = 0;
+    for (const q of free) {
+      if (q.p && q.p.gawk && !q.p.gawk.release) continue;
+      let best = null, bd = 14;
+      for (const c of cand) { if (used.has(c) || c.hid || c.p.child) continue; const d = Math.hypot(c.p.x - q.x, c.p.z - q.z); if (d < bd) { bd = d; best = c; } }
+      let far = false;
+      if (!best && initial) { for (const c of cand) if (!used.has(c) && c.hid && !c.p.child) { best = c; far = true; break; } }
+      if (!best) continue;
+      used.add(best); q.p = best.p; n++;
+      this.makeGawker(best.p, q, snap, far);
+      if (far) placed++; else { walked++; if (bd > 6) best.p.gawk.speed = Math.max(best.p.gawk.speed, 2.3); }
     }
-    G.n = n;
-    console.info(`[crowd] fight ring: ${n} onlookers in ${rows} row${rows > 1 ? 's' : ''} at r ${G.r.toFixed(1)} m around (${G.x.toFixed(1)}, ${G.z.toFixed(1)})`);
+    G.n += n;
+    if (initial) console.info(`[crowd] fight arena: r ${G.r.toFixed(1)} m at (${G.x.toFixed(1)}, ${G.z.toFixed(1)}), ${G.slots.length} spots, ${n} onlookers (${walked} walk in, ${placed} from out of view)`);
   },
 
-  makeGawker(p, a, row, snap) {
-    const G = this.gk, rng = this.rng;
-    const rr = G.r + 0.35 + row * 0.72 + rng.range(-0.2, 0.3);
+  makeGawker(p, slot, snap, far) {
+    const G = this.gk, rng = this.rng, a = slot.a, row = slot.row, rr = slot.rr + rng.range(-0.08, 0.12);
     const g = {
-      a, rr, tx: G.x + Math.cos(a) * rr, tz: G.z + Math.sin(a) * rr, rx: p.x, rz: p.z,
-      delay: snap ? 0 : rng.range(0.15, 1.6), release: false, speed: rng.range(1.3, 1.9),
+      a, a0: a, rr, tx: G.x + Math.cos(a) * rr, tz: G.z + Math.sin(a) * rr, rx: p.x, rz: p.z, far: !!far,
+      delay: snap || far ? 0 : rng.range(0.15, 1.0), release: false, speed: rng.range(1.5, 2.1),
       pose0: p.idlePose, lean: rng.range(0, 0.07), look: rng.range(-0.25, 0.25),
       // a third of them crane sideways to see past the shoulder in front
       roll: row > 0 && rng() < 0.45 ? rng.range(0.05, 0.10) * (rng() < 0.5 ? -1 : 1) : 0,
@@ -5065,12 +5171,37 @@ const crowd = {
     const r = rng();
     p.idlePose = r < 0.32 ? 4 : r < 0.50 ? 1 : r < 0.63 ? 2 : r < 0.70 ? 3 : r < 0.79 ? 6 : r < 0.86 ? 5 : r < 0.90 ? 7 : r < 0.95 ? 9 : 0;
     p.film2 = rng() < 0.5;                               // two-handed landscape vs one-handed portrait
+    if (p.shopT > 0) { p.shopT = 0; p.shopFace = null; p.shopCool = rng.range(14, 40); }   // (a window shopper turns from the window)
     p.gawk = g;
     if (snap) {
       p.x = g.tx; p.z = g.tz; p.moving = false; p.vel = 0;
       p.yaw = Math.atan2(G.x - p.x, G.z - p.z) + g.look * 0.4;
-      p.hx = p.x; p.hz = p.z;
+      p.hx = p.x; p.hz = p.z; p._reloc = 1; p._dX = p.x; p._dZ = p.z;
+    } else if (far) {
+      // out of view: placed just behind the spot, faded in as they step up to it (stepGawker). (_dX/_dZ: a placement,
+      // which guardExternal would otherwise take back -- combat:start calls this outside the crowd's step)
+      p.x = g.tx + Math.cos(a) * 3.2; p.z = g.tz + Math.sin(a) * 3.2; p.dfade = 0; p.fade = 0; p._reloc = 1; p._dX = p.x; p._dZ = p.z;
+      p.yaw = Math.atan2(G.x - p.x, G.z - p.z);
     }
+  },
+
+  // 健人 and everyone in the fight stay inside the arena: run after every module has moved them (the scanned crowd's
+  // render hook, and the top of the crowd's step), so a run, a dodge, a knock-back or a thrown body slides along the
+  // edge. Someone found well outside (a cinematic's placement) is brought in at a walk-fast pace, never jumped.
+  clampArena(dt) {
+    const G = this.gk; if (!G || !G.on) return;
+    const E = this.engine, en = E.get('enemy'), step = Math.max(0.2, 6 * (dt || 1 / 60));
+    const one = (e, margin) => {
+      if (!e || !e.position) return;
+      const P = e.position, dx = P.x - G.x, dz = P.z - G.z, d = Math.hypot(dx, dz), lim = G.r - margin;
+      if (!(d > lim)) return;
+      const over = d - lim, k = over > 0.3 ? Math.min(over, step) : over;
+      P.x -= dx / d * k; P.z -= dz / d * k;
+      const v = e.velocity; if (v) { const vr = (v.x * dx + v.z * dz) / d; if (vr > 0) { v.x -= dx / d * vr; v.z -= dz / d * vr; } }
+      G.clamps = (G.clamps || 0) + 1;
+    };
+    one(E.player, ARENA_MARGIN_P);
+    if (en && en.list) for (const e of en.list) one(e, ARENA_MARGIN_E);
   },
 
   // The same scanned person twice in close view (2026-09-26, the client's review: two of the blue-jacket backpacker a few
@@ -5141,22 +5272,20 @@ const crowd = {
 
   // During a fight (2026-09-26, the client's review: "during a fight no pedestrian hides the main characters"): the
   // lens's lines of sight to 健人's and each fighting enemy's chest (engine.camera, read every step), LENS_W either
-  // side, plus 健人's personal space. The ring's centre follows the fight at a walk, so the gallery goes with it.
+  // side, plus 健人's personal space. (The arena and its ring stay where the fight started: clampArena.)
   fightLens(dt) {
     const E = this.engine, G = this.gk, cam = E.camera, pl = E.player, en = E.get('enemy');
     const C = this._cor || (this._cor = new Float32Array(4 * 12));
     this._corN = 0;
-    if (!pl || E.state.mode !== 'combat' || !cam) return;
+    // (a heat action's own cameras too: it plays in 'cutscene' mode, inside the arena)
+    if (!pl || !(E.state.mode === 'combat' || (E.state.mode === 'cutscene' && G && G.on)) || !cam) return;
     let n = 0, fx = pl.position.x, fz = pl.position.z, fn = 1;
     const add = (x, z) => { if (n < 11 && Math.hypot(x - cam.position.x, z - cam.position.z) < 40) { C[n * 4] = cam.position.x; C[n * 4 + 1] = cam.position.z; C[n * 4 + 2] = x; C[n * 4 + 3] = z; n++; } };
     add(pl.position.x, pl.position.z);
     if (en && en.list) for (const e of en.list) if (e.alive && e.position) { add(e.position.x, e.position.z); if (Math.hypot(e.position.x - fx, e.position.z - fz) < 12) { fx += e.position.x; fz += e.position.z; fn++; } }
     this._corN = n;
     this._psX = pl.position.x; this._psZ = pl.position.z;
-    if (G && G.on) {                                     // the ring follows the fight's middle at a walking pace
-      const tx = fx / fn - G.x, tz = fz / fn - G.z, d = Math.hypot(tx, tz), m = Math.min(d, 0.9 * dt);
-      if (d > 1e-3) { G.x += tx / d * m; G.z += tz / d * m; }
-    }
+    // (the arena is fixed for the fight: it no longer follows the fight's middle, and nobody leaves it -- clampArena)
   },
   // is (x, z) within w of a line of sight (3-97 % along it) or within PERSONAL_R + 0.5 of 健人
   corridorHit(x, z, w) {
@@ -5189,35 +5318,98 @@ const crowd = {
 
   stepGawker(p, dt, t) {
     const g = p.gawk, G = this.gk;
-    // the slot rides the ring (its centre follows the fight: fightLens) and slides round it out of the lens's lines of
-    // sight to 健人 and the enemies he is fighting, and out of his personal space
+    // the slot steps a little way round the ring out of the lens's lines of sight to 健人 and the enemies he is fighting
+    // (at most GAWK_SLIDE either way, toward the side the line of sight is moving away from, with a margin that grows
+    // with the lens's own speed), and back to its own spot once they have moved on. Where a line of sight cannot be
+    // stepped out of that way -- a lens standing outside the ring, behind the gallery, looking in through it -- the
+    // ones standing in it dissolve, as anyone in the lens bubble does, and come back when it has moved on. (Unbounded,
+    // the slide was a snowplough: a lens swinging round behind the gallery swept a quarter of the ring into one heap.)
+    let inLine = false;
     if (G && !g.release && g.a != null) {
       const cx = G.x + Math.cos(g.a) * g.rr, cz = G.z + Math.sin(g.a) * g.rr;
-      if (this._corN && this.corridorHit(cx, cz, LENS_W + 0.3)) {
-        for (let k = 1; k <= 18; k++) {
-          const da = k * 0.07, s1 = this.corridorHit(G.x + Math.cos(g.a + da) * g.rr, G.z + Math.sin(g.a + da) * g.rr, LENS_W + 0.3);
-          if (!s1) { g.a += da; break; }
-          const s2 = this.corridorHit(G.x + Math.cos(g.a - da) * g.rr, G.z + Math.sin(g.a - da) * g.rr, LENS_W + 0.3);
-          if (!s2) { g.a -= da; break; }
-        }
+      const cvx = this.camVX || 0, cvz = this.camVZ || 0, W = LENS_W + 0.3 + Math.min(0.6, Math.hypot(cvx, cvz) * 0.2);
+      if (this._corN && this.corridorHit(cx, cz, W)) {
+        const cv = cvx * -Math.sin(g.a) + cvz * Math.cos(g.a), sg = cv > 0.3 ? -1 : 1, a0 = g.a0 != null ? g.a0 : g.a;
+        const hit = (a) => Math.abs(wrapPi(a - a0)) > GAWK_SLIDE || this.corridorHit(G.x + Math.cos(a) * g.rr, G.z + Math.sin(a) * g.rr, W);
+        let kp = 0, ko = 0;
+        for (let k = 1; k <= 8 && !(kp && ko); k++) { if (!kp && !hit(g.a + sg * k * 0.07)) kp = k; if (!ko && !hit(g.a - sg * k * 0.07)) ko = k; }
+        if (kp && (!ko || kp <= ko + 3)) { g.a += sg * kp * 0.07; g.dodge = 1.2; }
+        else if (ko) { g.a -= sg * ko * 0.07; g.dodge = 1.2; }
+        else inLine = true;
+      } else if (g.a0 != null && Math.abs(wrapPi(g.a0 - g.a)) > 0.01) {
+        const da = clamp(wrapPi(g.a0 - g.a), -0.16 * dt, 0.16 * dt), na = g.a + da;
+        if (!this._corN || !this.corridorHit(G.x + Math.cos(na) * g.rr, G.z + Math.sin(na) * g.rr, LENS_W + 0.3)) g.a = na;
       }
       g.tx = G.x + Math.cos(g.a) * g.rr; g.tz = G.z + Math.sin(g.a) * g.rr;
+    }
+    // fading: one who came in from out of view fades in; one standing in a line of sight right by the lens, or in one
+    // there was no stepping out of, dissolves until the lens moves on
+    if (!g.release) {
+      const cam = this.engine.camera;
+      const near = cam && Math.abs(p.x - cam.position.x) < 3.5 && Math.abs(p.z - cam.position.z) < 3.5 && Math.hypot(p.x - cam.position.x, p.z - cam.position.z) < 3.5;
+      // (...or one still in a line of sight 0.35 s on, stepping out of it as the lens moves the same way)
+      const inCor = !!this._corN && this.corridorHit(p.x, p.z, LENS_W + (inLine ? 0.3 : 0));
+      g.inT = inCor ? (g.inT || 0) + dt : 0;
+      const hide = inCor && (near || inLine || g.inT > 0.35);
+      if (hide) p.dfade = Math.max(0, p.dfade - dt * 5);
+      else if (p.dfade < 1) p.dfade = Math.min(1, p.dfade + dt * 1.6);
     }
     if (g.delay > 0) {
       g.delay -= dt; p.moving = false; p.vel = 0;
       if (G && !g.release) turnTo(p, Math.atan2(G.x - p.x, G.z - p.z), dt, 4);
       return;
     }
+    // one who came from out of view goes back out of view: a few steps back out from the ring fading away, then home
+    // (hidden) and faded back in there
+    if (g.release && g.far) {
+      if (g.far === true) {
+        if (G) { g.ox = p.x + (p.x - G.x) / Math.max(0.1, Math.hypot(p.x - G.x, p.z - G.z)) * 2.5; g.oz = p.z + (p.z - G.z) / Math.max(0.1, Math.hypot(p.x - G.x, p.z - G.z)) * 2.5; }
+        else { g.ox = p.x; g.oz = p.z; }
+        g.far = 1;
+      }
+      if (g.far === 1) {
+        const ex = g.ox - p.x, ez = g.oz - p.z, ed = Math.hypot(ex, ez), v = 1.4;
+        if (ed > 0.05) { const m = Math.min(ed, v * dt); p.x += ex / ed * m; p.z += ez / ed * m; turnTo(p, Math.atan2(ex, ez), dt, 6); p.moving = true; p.vel = v; advance(p, v, dt); }
+        else { p.moving = false; p.vel = 0; }
+        p.dfade = Math.max(0, p.dfade - dt * 1.4);
+        if (p.dfade <= 0) { p.x = g.rx; p.z = g.rz; p._reloc = 1; p._dX = p.x; p._dZ = p.z; p.moving = false; p.vel = 0; g.far = 2; }
+        return;
+      }
+      p.dfade = Math.min(1, p.dfade + dt * 1.6); p.moving = false; p.vel = 0;
+      if (p.dfade >= 1) { p.idlePose = g.pose0; p.gawk = null; if (p.kind === 'idler') { p.hx = p.x; p.hz = p.z; p.tx = p.x; p.tz = p.z; } }
+      return;
+    }
+    if (g.dodge > 0) g.dodge -= dt;
+    // the ring's own edge holds the gallery too: one found just inside it (a fighter pinned against the ring, the
+    // separation pass) is eased straight back out, never left standing in the arena
+    if (G && G.on && !g.release) {
+      const ox = p.x - G.x, oz = p.z - G.z, od = Math.hypot(ox, oz);
+      if (od < G.r + 0.1 && od > G.r - 1.5) { const k = Math.min(G.r + 0.1 - od, 2.5 * dt) / od; p.x += ox * k; p.z += oz * k; }
+    }
     const tx = g.release ? g.rx : g.tx, tz = g.release ? g.rz : g.tz;
     const dx = tx - p.x, dz = tz - p.z, d = Math.hypot(dx, dz);
     // once on the ring a body gives a little to its neighbours instead of stepping back into its slot every
     // time the separation pass nudges it -- that was a walk/stand flicker along the front row
-    if (g.at && !g.release && d < 0.9) g.at = true;
+    // (...unless that leaves them in a line of sight: then they step to the slot, which has moved out of it)
+    // (...or inside the arena: shoved in by a fighter or a car, they step back out to the ring)
+    if (g.at && !g.release && d < 0.9 && !(this._corN && this.corridorHit(p.x, p.z, LENS_W)) && !(G && G.on && Math.hypot(p.x - G.x, p.z - G.z) < G.r + 0.2)) g.at = true;
     else if (d > 0.22) {
       g.at = false;
-      const v = Math.min(g.speed, d * 2.5 + 0.3);
-      p.x += dx / d * v * dt; p.z += dz / d * v * dt;
-      turnTo(p, Math.atan2(dx, dz), dt, 6);
+      const v = Math.min(g.dodge > 0 ? Math.max(g.speed, 2.5) : g.speed, d * 2.5 + 0.3);   // (out of a line of sight: a hurried step)
+      // walking in, the way to a spot across the arena goes round it, never through the fight
+      let ux = dx / d, uz = dz / d;
+      if (G && G.on && !g.release) {
+        const ox = p.x - G.x, oz = p.z - G.z, od = Math.hypot(ox, oz);
+        const tpar = -(ox * ux + oz * uz), cx = ox + ux * tpar, cz = oz + uz * tpar;
+        if (od > G.r - 0.5 && tpar > 0 && tpar < d && Math.hypot(cx, cz) < G.r + 0.3) {
+          const sg = (ox * dz - oz * dx) > 0 ? 1 : -1;            // round the shorter way: along the tangent, held to the ring
+          const kr = clamp((g.rr - od) * 0.8, -0.5, 0.5);
+          ux = -oz / od * sg + ox / od * kr; uz = ox / od * sg + oz / od * kr;
+          const ul = Math.hypot(ux, uz); ux /= ul; uz /= ul;
+        }
+      }
+      p.x += ux * v * dt; p.z += uz * v * dt;
+      turnTo(p, Math.atan2(ux, uz), dt, 6);
       p.moving = true; p.vel = v; advance(p, v, dt);
       return;
     }
@@ -5231,7 +5423,9 @@ const crowd = {
     // face the fight; the player drags the eyeline around a little, like a head following the action
     const pl = this.engine.player;
     const fx = pl ? pl.position.x * 0.6 + G.x * 0.4 : G.x, fz = pl ? pl.position.z * 0.6 + G.z * 0.4 : G.z;
-    turnTo(p, Math.atan2(fx - p.x, fz - p.z) + g.look * 0.3, dt, 2.2);
+    // a big hit: a third of them snap round to it
+    if (this.gaspT > 0 && this.shockT > 0 && ((p.fid * 7) % 3) > 1.6) turnTo(p, Math.atan2(this.shockX - p.x, this.shockZ - p.z), dt, 7);
+    else turnTo(p, Math.atan2(fx - p.x, fz - p.z) + g.look * 0.3, dt, 2.2);
     p.hx = p.x; p.hz = p.z;
   },
 

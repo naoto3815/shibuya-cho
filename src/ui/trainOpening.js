@@ -1,16 +1,11 @@
-// Local files are the source of truth. See docs/OPENING.md for editorial intent
-// and the separate, not-yet-generated Veo replacement plan.
-export const TRAIN_SHOTS = [
-  { kind: 'card', duration: 3.2, eyebrow: 'PROLOGUE', title: 'あの事件から、十年。' },
-  { src: '/shibuya-cho/assets/opening/shinkansen-fuji.mp4', duration: 8, label: '東海道新幹線 · 東京へ',
-    cues: [{ start: 1, end: 7.5, speaker: '柊からの手紙', text: '渋沢、久しぶりだな。' }] },
-  // Appointment confirmed by the user: October 1, 20:00.
-  { kind: 'card', duration: 11, eyebrow: '柊からの手紙', title: '10年前のあの事件の真相について\n話したいことがある。',
-    detail: '10月1日の20時に渋谷町のハチ公前で会おう。', signature: '柊' },
-  { src: '/shibuya-cho/assets/opening/shinagawa-arrival.mp4', duration: 8, label: '品川駅', cues: [] },
-  { src: '/shibuya-cho/assets/opening/yamanote-shibuya.mp4', duration: 8, label: '山手線 · 渋谷へ', cues: [] },
-  { kind: 'card', duration: 3.6, eyebrow: '待ち合わせ', title: '10月1日 20:00', detail: '渋谷町　ハチ公前' },
-];
+// Approved 67.25-second opening includes the letter, Voice1 and Shibuya descent.
+// VP8 avoids the black video surface observed with VP9 in the in-app browser.
+export const TRAIN_SHOTS = [{
+  src: '/shibuya-cho/assets/opening/twin-dragon-opening-v5-vp8.webm',
+  fallbackSrc: '/shibuya-cho/assets/opening/twin-dragon-opening-v5.mp4',
+  poster: '/shibuya-cho/assets/opening/opening-v5-poster.jpg',
+  duration: 67.25, mastered: true, cues: [],
+}];
 
 export function playTrainOpening(engine, onComplete, shots = TRAIN_SHOTS) {
   const opening = shots === TRAIN_SHOTS;
@@ -42,7 +37,7 @@ export function playTrainOpening(engine, onComplete, shots = TRAIN_SHOTS) {
   audio?.setMusic?.('none'); audio?.setAmbience?.(false);
   video.setAttribute('aria-label', opening ? '渋沢が東京へ向かう映像' : '撮影しながら登場するファイトクラブの三人');
   let index = -1, finished = false, frameId, loadTimer, elapsed = 0, last = performance.now();
-  let userPaused = false, blocked = false, waiting = false, captionText = '';
+  let userPaused = false, blocked = false, waiting = false, captionText = '', usingFallback = false;
   const durations = shots.map(s => s.duration || 8);
   const total = durations.reduce((a, b) => a + b, 0);
   const isCard = () => shots[index]?.kind === 'card';
@@ -94,7 +89,7 @@ export function playTrainOpening(engine, onComplete, shots = TRAIN_SHOTS) {
     clearTimeout(loadTimer); video.pause(); index++;
     if (index >= shots.length) { finish(); return; }
     elapsed = 0; last = performance.now(); blocked = false; waiting = false; resume.hidden = true;
-    const shot = shots[index]; root.dataset.shot = String(index); stage.style.opacity = '0';
+    const shot = shots[index]; root.dataset.shot = String(index); root.dataset.mastered = String(!!shot.mastered); usingFallback = false; stage.style.opacity = shot.mastered ? '1' : '0';
     card.hidden = !isCard(); frame.hidden = isCard();
     location.textContent = shot.label || '';
     caption.querySelector('small').textContent = ''; caption.querySelector('p').textContent = ''; captionText = '';
@@ -104,7 +99,7 @@ export function playTrainOpening(engine, onComplete, shots = TRAIN_SHOTS) {
       card.querySelector('p').textContent = shot.detail || '';
       card.querySelector('span').textContent = shot.signature || '';
     } else {
-      waiting = true; video.src = shot.src; video.load();
+      waiting = true; video.poster = shot.poster || ''; video.src = shot.src; video.load();
       loadTimer = setTimeout(() => showRetry('読み込みが遅れています — 再試行'), 15000);
       play();
     }
@@ -118,7 +113,7 @@ export function playTrainOpening(engine, onComplete, shots = TRAIN_SHOTS) {
       else elapsed = video.currentTime || 0;
       const duration = isCard() ? durations[index] : (Number.isFinite(video.duration) ? video.duration : durations[index]);
       // Fades follow media time, so buffering/hidden tabs cannot desynchronise subtitles.
-      const envelope = Math.max(0, Math.min(1, elapsed / .55, (duration - elapsed) / .45));
+      const envelope = shot.mastered ? 1 : Math.max(0, Math.min(1, elapsed / .55, (duration - elapsed) / .45));
       stage.style.opacity = String(envelope);
       const volume = Math.max(0, Math.min(1, audio?.getVolume?.() ?? .75));
       video.volume = volume * envelope; video.muted = !!audio?.muted;
@@ -138,7 +133,14 @@ export function playTrainOpening(engine, onComplete, shots = TRAIN_SHOTS) {
   video.addEventListener('playing', () => { if (!finished) { waiting = false; blocked = false; clearTimeout(loadTimer); resume.hidden = true; } });
   video.addEventListener('waiting', () => { waiting = true; });
   video.addEventListener('ended', next);
-  video.addEventListener('error', () => showRetry('動画を読み込めません — 再試行'));
+  video.addEventListener('error', () => {
+    if (finished) return;
+    const shot = shots[index];
+    if (shot?.fallbackSrc && !usingFallback) {
+      usingFallback = true; waiting = true;
+      video.src = shot.fallbackSrc; video.load(); play();
+    } else showRetry('動画を読み込めません — 再試行');
+  });
   resume.onclick = () => { blocked = false; userPaused = false; pause.textContent = '一時停止'; if (video.error) video.load(); play(); };
   pause.onclick = togglePause; skip.onclick = finish;
   window.addEventListener('keydown', onKey, true); document.addEventListener('visibilitychange', visibility);

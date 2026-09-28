@@ -913,6 +913,8 @@ export class CrowdScan {
             this.cuts = (this.cuts || 0) + 1;
             cr.cutF = cr.frame;
           }
+          // a fight's arena holds 健人 and the men he fights: clamped here, after every module has moved them this frame
+          if (cr.clampArena) cr.clampArena(this.dt || 1 / 60);
           // whatever moved a pedestrian after the crowd's step (missions updates after it) is judged before it is drawn
           if (cr.guardExternal) cr.guardExternal();
           this.pack(this.dt || 1 / 60, this.t != null ? this.t : 0);

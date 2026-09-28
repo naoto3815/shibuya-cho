@@ -5,6 +5,8 @@ import * as THREE from 'three';
 import * as L from './lib.js';
 import { VISTA } from './streets.js';
 import * as S from './shared.js';
+import { UPPER_WEST } from '../upperWestData.js';
+import { DENSITY_CONTEXT } from '../densityContext.js';
 import { BACKDROP_TRUE } from '../dogenzakaData.js';
 
 let M = null;
@@ -106,14 +108,21 @@ export function buildImpostors(ctx) {
   const corr = ctx.CITY.corridor && ctx.CITY.corridor.outline;
   const t246 = ctx.CITY.roads.filter((q) => q.id === 'tamagawa_ue');
   const nearCorr = (x, z, r) => {
+    if (L.pointInPoly(x,z,UPPER_WEST.poly) || UPPER_WEST.poly.some((a,i)=>L.distToSegment(x,z,...a,...UPPER_WEST.poly[(i+1)%UPPER_WEST.poly.length])<r+2)) return true;
+    if (DENSITY_CONTEXT.some(b => L.pointInPoly(x,z,b.poly) || b.poly.some((a,i)=>{const q=b.poly[(i+1)%b.poly.length];return L.distToSegment(x,z,...a,...q)<r;}))) return true;
     for (const q of t246) for (let i = 0; i < q.path.length - 1; i++) if (L.distToSegment(x, z, q.path[i][0], q.path[i][1], q.path[i + 1][0], q.path[i + 1][1]) < r + 8) return true;
+    const outline = ctx.CITY.scope?.outline;
+    if (outline && (L.pointInPoly(x,z,outline) || outline.some((a,i) => { const b=outline[(i+1)%outline.length]; return L.distToSegment(x,z,a[0],a[1],b[0],b[1])<r; }))) return true;
     if (!corr) return false;
     if (L.pointInPoly(x, z, corr)) return true;
     for (let i = 0, j = corr.length - 1; i < corr.length; j = i++) if (L.distToSegment(x, z, corr[j][0], corr[j][1], corr[i][0], corr[i][1]) < r) return true;
     return false;
   };
-  for (const [k, b] of BACKDROP_TRUE.entries()) {
-    const c = L.polyCentroid(b.poly), y0 = yAt(c[0], c[1]) - 1.5, du = Math.floor(L.hash(k, 1, 83) * 16) * 3;
+  for (const [k, b] of [...BACKDROP_TRUE,...DENSITY_CONTEXT].entries()) {
+    if (UPPER_WEST.replacedContext.includes(b.id)) continue;
+    const c = L.polyCentroid(b.poly);
+    if (ctx.CITY.scope && L.pointInPoly(c[0],c[1],ctx.CITY.scope.outline)) continue;
+    const y0 = yAt(c[0], c[1]) - 1.5, du = Math.floor(L.hash(k, 1, 83) * 16) * 3;
     seaBatch.add(b.h > 55 ? R.tower : R.sea, L.extrudePolygon(b.poly, y0, y0 + b.h + 1.5, { cap: false, faceUV: (i) => ({ su: 1 / 48, sv: 1 / 140, u0: du + i * 7, v0: Math.floor(L.hash(k, i, 84) * 40) * 3.5 }) }), c[0], c[1]);
     seaBatch.add(R.deck, L.polygonCap(b.poly, y0 + b.h + 1.5, 0.25), c[0], c[1]);
     if (b.h > 45) seaBatch.add(R.red, L.boxAt(c[0], y0 + b.h + 2.5, c[1], 1.2, 1.0, 1.2, 0, false));

@@ -1,12 +1,14 @@
 // [mobility] LOOP — game-only ports spaced along the streets (not real operator locations).
-// Rent/return at a station; dismount anywhere to push forward/backward and pivot out of tight corners.
-// Space toggles riding/pushing; E returns at an available station, otherwise toggles riding/pushing.
-// Rental time continues while pushing; pause stops it. Both road and pavement retain the 50 km/h riding cap.
+// Rent/return at a station only (E). No dismounting or pushing (client, 2026-09-27: 「降りる引く仕様をなくし、Sボタン押すだけ
+// で後ろに下がれるようにして」 — not how the real service works): W accelerates, S brakes and, once stopped, backs up;
+// A/D steer (at a standstill they pivot the board). Pause stops the rental time. 70 km/h on road and pavement, quicker
+// pick-up (client, 2026-09-28: 「最大速度70ｋｍで、加速をもう少し早めて。あと、どこでも降りれるようにして」): E returns
+// at a bay with room; anywhere else E gets off there and the board is sent back to the nearest bay with room.
 //
 //   loop.ports[]                 { ...LOOP_PORTS row, W, D, slotsDocked[] }
 //   loop.ride                    null | { port, t, v, steer, mode:'road'|'pave', fare() }
 //   loop.canRide()               the story / fight / cutscene gate (also: no live enemy anywhere)
-//   loop.startRide(port)  loop.endRide(reason)       reason: 'return' | 'forced' | 'crash'
+//   loop.startRide(port)  loop.endRide(reason)       reason: 'return' | 'drop' | 'forced' | 'crash'
 //   loop.nearestPort(x, z, needFree)   loop.freeBoards(port)   loop.fare(seconds)
 //   engine.player.riding (bool) — player.js yields movement to this module while it is set;
 //   engine.player.avoidR — crowd.js widens its player-avoid ring at speed.
@@ -22,10 +24,11 @@ import { LOOP_PORTS, LOOP_BRAND, LOOP_FARE, LOOP_SPEED, portCandidate } from './
 
 const KMH = 1 / 3.6;
 const V_ROAD = LOOP_SPEED.road * KMH, V_PAVE = LOOP_SPEED.pavement * KMH;
-// motor pull (m/s²) and tyre grip (lateral m/s²) sized for 50 km/h: 0→50 km/h in ~3.8 s; the tightest turn at 50 km/h
-// is a ~19 m radius, at 25 km/h ~5 m
-const ACCEL = 4.0, GRIP = 10.0;
-const ONE_CAP = LOOP_SPEED.road === LOOP_SPEED.pavement;         // no 車道 / 歩道 distinction to show
+// motor pull (m/s²) and tyre grip (lateral m/s²): 0→50 km/h in ~2.6 s, 0→70 km/h in ~3.6 s; the tightest turn at
+// 70 km/h is a ~38 m radius (hard steering scrubs speed first), at 50 km/h ~19 m, at 25 km/h ~5 m
+const ACCEL = 5.5, GRIP = 10.0;                                    // 4.0 → 5.5 m/s² (client: 加速を早めて)
+const ONE_CAP = LOOP_SPEED.road === LOOP_SPEED.pavement;
+const REV_V = 2.2, REV_ACC = 2.5;                                  // backing up with S: ~8 km/h, eased in         // no 車道 / 歩道 distinction to show
 const SLOT_W = 0.62, DECK = 0.135, WHEELBASE = 0.9, DOCK_R = 110;
 const RENT_TXT = 'LOOPに乗る（基本¥50＋¥15/分）';
 const SANS = '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", sans-serif';
@@ -473,7 +476,7 @@ const loop = {
     if (this.rideBoard.parent !== e.group) e.group.add(this.rideBoard);
     this.rideBoard.visible = true;
     this.ride = { port, t: 0, v: 0, steer: 0, mode: 'pave', lift: opts.force ? 1 : 0, bumpT: 0, roll: 0, gy: e.position.y, blink: 0, lean: 0, acc: 0,
-      pushing: false, pushSide: 1, saved: e.humanoid.bones ? poseSave(e.humanoid.bones) : null, propVisibility: Object.values(e.humanoid.props || {}).filter(p=>p?.isObject3D).map(p=>[p,p.visible]) };
+      saved: e.humanoid.bones ? poseSave(e.humanoid.bones) : null, propVisibility: Object.values(e.humanoid.props || {}).filter(p=>p?.isObject3D).map(p=>[p,p.visible]) };
     for (const [prop] of this.ride.propVisibility) prop.visible=false;
     const cam = engine.get('camera');
     if (cam) { this.ride.cam0 = { distance: cam.distance, height: cam.height }; }
@@ -513,7 +516,8 @@ const loop = {
     const cam = engine.get('camera');
     if (cam && R.cam0) { cam.distance = R.cam0.distance; cam.height = R.cam0.height; }
     this.stopAudio();
-    if (reason === 'return') { this.toast(`返却完了　ご利用 ${mins}分　¥${fare.toLocaleString('en-US')}`, port.name); this.beep(false); }
+    if (reason === 'drop') { this.toast(`LOOPを降りました　ご利用 ${mins}分　¥${fare.toLocaleString('en-US')}`, `ボードは「${port.name}」ポートへ回送されます`); this.beep(false); }
+    else if (reason === 'return') { this.toast(`返却完了　ご利用 ${mins}分　¥${fare.toLocaleString('en-US')}`, port.name); this.beep(false); }
     else if (reason === 'crash') this.toast(`車と接触 — LOOPは「${port.name}」ポートへ自動返却されました`, `料金 ¥${fare.toLocaleString('en-US')}＋回送手数料 ¥${fee.toLocaleString('en-US')}`, true);
     else this.toast(`LOOPを「${port.name}」ポートへ自動返却しました`, `ご利用 ${mins}分　¥${fare.toLocaleString('en-US')}`);
     this.lastEnd = { reason, port: port.id, fare, fee, minutes: mins, seconds: R.t };
@@ -539,17 +543,16 @@ const loop = {
       const storyBusy = ms && (ms.scene || ms.talk || ms.fightCtx);
       if (mode === 'cutscene' || mode === 'combat' || storyBusy || !e.alive) { this.endRide('forced'); this.paintHUD(); return; }
       if (mode === 'paused' || engine.state.frozen) { this.pose(e, R, 0); return; }
-      if (input.buttons.dodge.pressed) { input.buttons.dodge.pressed=false; this.togglePush(e,R); }
+      if (input.buttons.dodge.pressed) input.buttons.dodge.pressed = false;   // no dodge (or dismount) from the saddle
       if (input.buttons.interact.pressed) {
         input.buttons.interact.pressed = false;               // (missions reads E after us: no conversation from the saddle)
         const zone = this.returnZone(e.position.x, e.position.z);
         if (zone && this.freeSlots(zone) > 0) { this.endRide('return', zone); this.paintHUD(); return; }
-        this.togglePush(e,R);
-        if (zone) this.toast('このポートは満車です', '押し歩きで移動できます。返却は空きポートへ', true);
+        this.endRide('drop'); this.paintHUD(); return;         // anywhere else: he gets off here, the board goes back on its own
       }
-      if (R.pushing) this.push(e,R,dt,input); else this.drive(e, R, dt, input);
+      this.drive(e, R, dt, input);
       this.pose(e, R, dt);
-      if(R.pushing) this.stopAudio(); else this.updateAudio(R);
+      this.updateAudio(R);
     } else {
       // walking: the rent prompt at the nearest bay with a board
       this._near = null;
@@ -583,38 +586,6 @@ const loop = {
     return null;
   },
 
-  togglePush(e,R) {
-    R.pushing=!R.pushing; R.v=0; R.roll=0; R.yawRate=0;
-    e.velocity.set(0,0,0); e.moveSpeed=0;
-    e.humanoid.play('idle',{force:true,fade:.12});
-    if(R.pushing && this.engine.world) {
-      // Choose the less obstructed side without teleporting the player through a wall.
-      const w=this.engine.world;
-      let best=-Infinity;
-      for(const side of [1,-1]) {
-        const d=new THREE.Vector3(Math.cos(e.yaw)*.55*side,0,-Math.sin(e.yaw)*.55*side);
-        const p=w.moveCapsule(e.position,.15,1.1,d),score=(p.x-e.position.x)*d.x+(p.z-e.position.z)*d.z;
-        if(score>best){best=score;R.pushSide=side;}
-      }
-    }
-    this.toast(R.pushing?'LOOPから降りました':'LOOPに乗りました',R.pushing?'W / S：押す・後退　A / D：向きを変える　Space：乗る':'Space：降りて押し歩き');
-  },
-  push(e,R,dt,input) {
-    const world=this.engine.world;
-    R.t+=dt; R.v=clamp(input.move.y,-1,1)*1.2;
-    e.yaw-=clamp(input.move.x,-1,1)*1.8*dt;
-    const delta=new THREE.Vector3(Math.sin(e.yaw)*R.v*dt,0,Math.cos(e.yaw)*R.v*dt);
-    const x=e.position.x,z=e.position.z;
-    const p=world?world.moveCapsule(e.position,e.radius||.35,e.height||1.9,delta):e.position.clone().add(delta);
-    e.position.x=p.x; e.position.z=p.z;
-    e.position.y=world?world.groundHeight(p.x,p.z):0;
-    const travelled=Math.hypot(p.x-x,p.z-z),speed=dt>0?travelled/dt:0;
-    e.moveSpeed=speed; e.velocity.set(dt?(p.x-x)/dt:0,0,dt?(p.z-z)/dt:0); e.avoidR=1.3;
-    const action=e.humanoid.play(speed>.05?'walk':'idle',{fade:.12});
-    if(action && speed>.05) action.setEffectiveTimeScale((R.v<0?-1:1)*speed/2/(e.group.scale.x||1));
-    const cam=this.engine.get('camera');
-    if(cam && R.cam0){cam.distance=R.cam0.distance;cam.height=R.cam0.height;}
-  },
   drive(e, R, dt, input) {
     const engine = this.engine, world = engine.world;
     R.t += dt;
@@ -640,15 +611,24 @@ const loop = {
     // the slope under the wheels (道玄坂 3.5 %, 宮益坂): gravity along the heading
     const fx = Math.sin(e.yaw), fz = Math.cos(e.yaw);
     if (world && R.v > 0.05) { const h1 = world.groundHeight(pos.x + fx * 0.6, pos.z + fz * 0.6), h0 = world.groundHeight(pos.x - fx * 0.6, pos.z - fz * 0.6), s = (h1 - h0) / 1.2; if (Math.abs(s) < 0.12) a -= 9.8 * s * 0.8; }
-    R.acc = a;
-    R.v = Math.max(0, R.v + a * dt);
-    if (R.v < 0.03 && thr < 0.05) R.v = 0;
+    if (R.v < -0.01) {
+      // backing up: S held keeps it going (up to REV_V), anything else brings it to rest
+      R.acc = 0;
+      R.v += clamp(-REV_V * brk - R.v, -REV_ACC * dt, (thr > 0.02 ? 6 : 3) * dt);
+      if (R.v > -0.01 && brk < 0.02) R.v = 0;
+    } else {
+      R.acc = a;
+      R.v = Math.max(0, R.v + a * dt);
+      if (R.v < 0.03 && thr < 0.05) R.v = 0;
+      if (R.v === 0 && brk > 0.02 && thr < 0.02) R.v = -REV_ACC * brk * dt;   // stopped and S still held: back up
+    }
     // steering: kinematic bicycle, the yaw rate held under ~3.2 m/s² of lateral grip; at a standstill a foot on the
     // ground walks the board round
     R.steer += (steerIn - R.steer) * damp(7, dt);
     let yawRate;
-    if (R.v < 0.35) yawRate = -R.steer * (0.9 + R.v * 1.2);
-    else { const kin = R.v * Math.tan(0.5 * R.steer) / WHEELBASE, lim = GRIP / R.v; yawRate = -clamp(kin, -lim, lim); }
+    // (backing up, it steers like a reversing car: the kinematic sign follows the speed's)
+    if (Math.abs(R.v) < 0.35) yawRate = -R.steer * (0.9 + Math.abs(R.v) * 1.2);
+    else { const kin = R.v * Math.tan(0.5 * R.steer) / WHEELBASE, lim = GRIP / Math.abs(R.v); yawRate = -clamp(kin, -lim, lim); }
     e.yaw = Math.atan2(Math.sin(e.yaw + yawRate * dt), Math.cos(e.yaw + yawRate * dt));
     R.yawRate = yawRate;
     // move through the physics world (slides along walls, steps the 15 cm kerbs)
@@ -706,19 +686,6 @@ const loop = {
   pose(e, R, dt) {
     const h = e.humanoid, B = h && h.bones, g = e.group;
     if (!B || !B.LeftArm) return;
-    if(R.pushing) {
-      const sc=g.scale.x||1,side=R.pushSide||1;
-      g.rotation.set(0,e.yaw,0); g.updateMatrixWorld(true);
-      this.rideBoard.position.set(side*.55/sc,0,.06/sc);
-      const rest=restPose(h),prefix=side>0?'Left':'Right';
-      for(const n of [prefix+'Arm',prefix+'ForeArm'])if(B[n]&&rest[n])B[n].quaternion.copy(rest[n]);
-      g.updateMatrixWorld(true);
-      const hand=new THREE.Vector3(side*.35/sc,1.01/sc,.40/sc).applyMatrix4(g.matrixWorld);
-      const elbow=new THREE.Vector3(side*.8/sc,1.1/sc,0).applyMatrix4(g.matrixWorld);
-      if(B[prefix+'Arm'])twoBone(B[prefix+'Arm'],B[prefix+'ForeArm'],B[prefix+'Hand'],hand,elbow);
-      this.modeLamp.visible=false; this.beam.visible=false;
-      return;
-    }
     this.rideBoard.position.set(0,-DECK/(g.scale.x||1),.06/(g.scale.x||1));
     const lat = R.v * (R.yawRate || 0);                          // lateral acceleration → lean into the turn
     R.roll += (clamp(Math.atan2(lat, 9.8), -0.2, 0.2) - R.roll) * damp(6, dt || 1);
@@ -815,7 +782,7 @@ const loop = {
     el.innerHTML = `
       <div class="loop-ride"><div class="hd"><span class="brand">LOOP</span><span class="kana">ループ</span><span class="mode road"><i class="lamp"></i><b>車道</b></span></div>
         <div class="spd">0<small>km/h</small></div><div class="cap">上限 ${LOOP_SPEED.road} km/h</div>
-        <div class="controls" style="font-size:12px;margin-top:8px">Space：降りる / 乗る　E：ポートで返却<br>押し歩き：W 前進 / S 後退 / A D 旋回</div>
+        <div class="controls" style="font-size:12px;margin-top:8px">W：加速　S：ブレーキ・後退　A / D：ハンドル<br>E：降りる（ポートでは返却）</div>
         <div class="row"><span class="tm"><i>利用時間</i>00:00</span><span class="fr"><i>料金</i>¥65</span></div></div>
       <div class="loop-prompt"><div class="pn"></div><div class="tx"></div></div>
       <div class="loop-toast"><div class="m"></div><div class="sub"></div></div>`;
@@ -840,7 +807,7 @@ const loop = {
     set('on', !!R, (v) => u.ride.classList.toggle('on', v));
     if (R) {
       set('spd', Math.round(Math.abs(R.v) / KMH), (v) => { u.spd.firstChild.nodeValue = String(v); });
-      set('mode', R.pushing ? 'push' : R.mode, (v) => { u.mode.className = 'mode ' + v; u.modeB.textContent = v === 'road' ? '車道' : '歩道'; u.cap.textContent = ONE_CAP ? `上限 ${LOOP_SPEED.road} km/h` : v === 'road' ? `上限 ${LOOP_SPEED.road} km/h（車道）` : `上限 ${LOOP_SPEED.pavement} km/h（歩道モード）`; u.mode.style.display = ONE_CAP ? 'none' : ''; if(v==='push')u.cap.textContent='押し歩き・後退できます'; });
+      set('mode', R.mode, (v) => { u.mode.className = 'mode ' + v; u.modeB.textContent = v === 'road' ? '車道' : '歩道'; u.cap.textContent = ONE_CAP ? `上限 ${LOOP_SPEED.road} km/h` : v === 'road' ? `上限 ${LOOP_SPEED.road} km/h（車道）` : `上限 ${LOOP_SPEED.pavement} km/h（歩道モード）`; u.mode.style.display = ONE_CAP ? 'none' : ''; if(v==='push')u.cap.textContent='押し歩き・後退できます'; });
       const s = Math.floor(R.t);
       set('tm', s, (v) => { u.tm.lastChild.nodeValue = `${String(Math.floor(v / 60)).padStart(2, '0')}:${String(v % 60).padStart(2, '0')}`; });
       set('fr', this.fare(R.t), (v) => { u.fr.lastChild.nodeValue = '¥' + v.toLocaleString('en-US'); });

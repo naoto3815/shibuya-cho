@@ -68,7 +68,7 @@ function boxBlur(f, N, r) {
   return f;
 }
 const LABELS = {
-  shibuya109: 'SHIBUYA 1O9', qfront: 'Q-FRONT', magnet: 'MAGNET', ekimaeBldg: '駅前ビル', station: '渋谷町駅',
+  shibuya109: 'SHIBUYA ARC', qfront: 'Q-FRONT', magnet: 'MAGNET', ekimaeBldg: '駅前ビル', station: '渋谷町駅',
   scrambleSquare: 'スクランブルスクエア', markCity: 'マークシティ', seibu: '西部 A館', seibuB: '西部 B館', nonbei: 'のんべい横丁',
   miyashitaPark: '宮下パーク', hikarie: 'ヒカリエ', fukuras: 'フクラス', loft: 'LOFTY', modi: 'MOD1', parco: 'PALCO',
   towerRecord: 'TOWER RECORD', stream: 'ストリーム',
@@ -733,7 +733,8 @@ const hud = {
   // ---------------------------------------------------------------------------------------------- minimap
   // addMapLayer(fn): fn(ctx, project(x, z) -> [sx, sy], info) draws screen-space icons on the minimap (info.mini, the
   // disc centre C / radius R in CSS px; project's array is reused — read it at once) and on the pause world map
-  // (info.mini false, info.css = the map's size). Called every minimap repaint (30 Hz) and once per pause.
+  // (info.mini false, info.css = the map's height, info.w × info.h its size). Called every minimap repaint (30 Hz) and on
+  // each pause-map draw (opening, zoom, pan).
   mapLayers: [],
   addMapLayer(fn) { if (typeof fn === 'function' && !this.mapLayers.includes(fn)) this.mapLayers.push(fn); return fn; },
 
@@ -850,24 +851,32 @@ const hud = {
 
   // ---- the pause screen's whole-city map (menus.pause): north up, every street / block / landmark, 健人 as the
   // arrow, the objective and the open substories. Drawn once per pause into the caller's canvas.
-  drawWorldMap(cv, css) {
+  // size: a number (square, CSS px) or { w, h }. view (pause map zoom / pan): { zoom 1..6, cx, cz } — zoom 1 frames
+  // the whole city; the centre is kept over it. Returns the framing so a caller can zoom about a point.
+  drawWorldMap(cv, size, view = null) {
     const engine = this.engine;
     if (!this.map || !this.map.blds.length) this.buildMap();
     const M = this.map, dpr = Math.min(2, window.devicePixelRatio || 1);
-    cv.width = cv.height = Math.round(css * dpr); cv.style.width = cv.style.height = css + 'px';
+    const W = typeof size === 'number' ? size : size.w, H = typeof size === 'number' ? size : size.h;
+    cv.width = Math.round(W * dpr); cv.height = Math.round(H * dpr); cv.style.width = W + 'px'; cv.style.height = H + 'px';
     const g = cv.getContext('2d');
     // frame the streets (not the empty far corners of the bounds)
     let x0 = Infinity, z0 = Infinity, x1 = -Infinity, z1 = -Infinity;
     for (const r of M.roads) { x0 = Math.min(x0, r.bb[0]); z0 = Math.min(z0, r.bb[1]); x1 = Math.max(x1, r.bb[2]); z1 = Math.max(z1, r.bb[3]); }
-    let half = Math.min(Math.max(x1 - x0, z1 - z0) / 2 + 10, (CITY.bounds || 440) / 2 + 30);
-    let cx = Math.max(x0 + half - 20, Math.min(x1 - half + 20, (x0 + x1) / 2)), cz = (z0 + z1) / 2;
+    const B = (CITY.bounds || 440) / 2 + 30;
+    let bx0 = Math.max(x0 - 10, -B), bz0 = Math.max(z0 - 10, -B), bx1 = Math.min(x1 + 10, B), bz1 = Math.min(z1 + 10, B);
     // [city] pass 15: the square plus the 道玄坂 corridor up to 道玄坂上 (cityData worldMapBox)
-    if (CITY.worldMapBox) { const [bx0, bz0, bx1, bz1] = CITY.worldMapBox; half = Math.max(bx1 - bx0, bz1 - bz0) / 2 + 8; cx = (bx0 + bx1) / 2; cz = (bz0 + bz1) / 2; }
-    const k = css / (2 * half);
+    if (CITY.worldMapBox) { [bx0, bz0, bx1, bz1] = CITY.worldMapBox; bx0 -= 8; bz0 -= 8; bx1 += 8; bz1 += 8; }
+    const k0 = Math.min(W / (bx1 - bx0), H / (bz1 - bz0));
+    const zoom = Math.max(1, Math.min(6, (view && view.zoom) || 1)), k = k0 * zoom;
+    const hx = W / (2 * k), hz = H / (2 * k);
+    const keep = (c, a, b, h) => (b - a <= 2 * h ? (a + b) / 2 : Math.max(a + h, Math.min(b - h, c)));
+    const cx = keep(view && view.cx != null ? view.cx : (bx0 + bx1) / 2, bx0, bx1, hx);
+    const cz = keep(view && view.cz != null ? view.cz : (bz0 + bz1) / 2, bz0, bz1, hz);
     const trace = (pts, close) => { g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); for (let i = 1; i < pts.length; i++) g.lineTo(pts[i][0], pts[i][1]); if (close) g.closePath(); };
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
-    g.fillStyle = COL.base; g.fillRect(0, 0, css, css);
-    g.save(); g.translate(css / 2, css / 2); g.scale(k, k); g.translate(-cx, -cz);
+    g.fillStyle = COL.base; g.fillRect(0, 0, W, H);
+    g.save(); g.translate(W / 2, H / 2); g.scale(k, k); g.translate(-cx, -cz);
     g.lineCap = 'round'; g.lineJoin = 'round';
     g.strokeStyle = COL.walk; for (const r of M.roads) { g.lineWidth = r.sw; trace(r.path); g.stroke(); }
     g.strokeStyle = COL.paving; for (const w of M.walks) { g.lineWidth = w.w; trace(w.path); g.stroke(); }
@@ -884,13 +893,14 @@ const hud = {
     for (const m of M.marks) { trace(m.poly, true); g.fill(); g.stroke(); if (m.cyl) { g.beginPath(); g.arc(m.cyl.center[0], m.cyl.center[1], m.cyl.radius, 0, Math.PI * 2); g.fill(); g.stroke(); } }
     g.lineCap = 'butt';
     for (const r of M.rail) { g.strokeStyle = COL.rail; g.lineWidth = r.w; trace(r.path); g.stroke(); }
+    if (CITY.scope) { g.strokeStyle = '#e3a15a'; g.lineWidth = 1.5 / k; g.setLineDash([6/k, 4/k]); trace(CITY.scope.outline, true); g.stroke(); g.setLineDash([]); }
     g.restore();
-    const S = (x, z) => [css / 2 + (x - cx) * k, css / 2 + (z - cz) * k];
+    const S = (x, z) => [W / 2 + (x - cx) * k, H / 2 + (z - cz) * k];
     // labels: landmarks and streets, largest first, no overlaps
     const taken = [];
     const label = (text, x, z, font, fill, dy = 0) => {
       const [sx, sy0] = S(x, z), sy = sy0 + dy;
-      if (sx < 8 || sy < 10 || sx > css - 8 || sy > css - 8) return;
+      if (sx < 8 || sy < 10 || sx > W - 8 || sy > H - 8) return;
       g.font = font; const w = g.measureText(text).width + 8, h = 16;
       for (const t of taken) if (Math.abs(t[0] - sx) < (t[2] + w) / 2 && Math.abs(t[1] - sy) < h) return;
       taken.push([sx, sy, w]);
@@ -920,7 +930,7 @@ const hud = {
       const txt = ms.current && ms.current.text;
       if (txt) label('目的：' + txt, op.x, op.z, `700 13px ${SANS}`, '#ffe08a', -20);
     }
-    for (const f of this.mapLayers) { try { f(g, S, { mini: false, css, k }); } catch (e) { if (!f._err) { f._err = true; console.warn('[hud] map layer', e); } } }
+    for (const f of this.mapLayers) { try { f(g, S, { mini: false, css: H, w: W, h: H, k }); } catch (e) { if (!f._err) { f._err = true; console.warn('[hud] map layer', e); } } }
     // 健人: a pulsing ring and the heading arrow (north up, so the arrow turns with him)
     const pl = engine.player;
     if (pl) {
@@ -932,11 +942,13 @@ const hud = {
       label('現在地', pl.position.x, pl.position.z, `800 13px ${SANS}`, '#fff4d2', 30);
     }
     // north and scale
-    g.drawImage(this.north || this.paintNorth(), css - 40, 12, 28, 28);
-    const bar = 100 * k;
-    g.fillStyle = '#d9b45a'; g.fillRect(16, css - 22, bar, 3);
-    g.font = `600 11px ${SANS}`; g.textAlign = 'left'; g.fillStyle = '#d9c9a0'; g.fillText('100 m', 20 + bar, css - 20);
-    return { cx, cz, k };
+    g.drawImage(this.north || this.paintNorth(), W - 40, 12, 28, 28);
+    // the scale bar: the longest round length that stays under ~160 px at this zoom
+    const m = [10, 20, 50, 100, 200, 500].reduce((a, v) => (v * k <= 160 ? v : a), 10), bar = m * k;
+    if(CITY.scope){g.font=`9px ${SANS}`;g.textAlign='right';g.fillStyle='#8e9aac';g.fillText('© OpenStreetMap contributors · PLATEAU · 国土地理院',W-12,H-8);}
+    g.fillStyle = '#d9b45a'; g.fillRect(16, H - 22, bar, 3);
+    g.font = `600 11px ${SANS}`; g.textAlign = 'left'; g.fillStyle = '#d9c9a0'; g.fillText(`${m} m`, 20 + bar, H - 20);
+    return { cx, cz, k, k0, zoom, W, H, box: [bx0, bz0, bx1, bz1] };
   },
 
   paintRing() {

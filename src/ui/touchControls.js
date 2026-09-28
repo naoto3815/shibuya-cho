@@ -46,12 +46,14 @@ html.is-touch body { position: fixed; inset: 0; }
 #touch-ui [data-btn=interact] small { color: #3a2c10; font-size: 10px; margin: 0; }
 #touch-ui .top { position: absolute; top: calc(8px + var(--st)); left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: none; }
 #touch-ui .top .btn { position: static; width: auto; height: 36px; padding: 0 14px; border-radius: 18px; flex-direction: row; gap: 6px; font-size: 13px; }
-#touch-ui.riding .fight:not([data-btn=dodge]), #touch-ui.paused .play, #touch-ui.paused .zone, #touch-ui.paused .stick-base,
+#touch-ui.riding .fight, #touch-ui.paused .play, #touch-ui.paused .zone, #touch-ui.paused .stick-base,
 #touch-ui.paused .top .btn:not([data-btn=pause]) { display: none; }
 #touch-ui.paused [data-btn=pause] { background: rgba(217, 180, 90, .9); color: #100d06; }
 #touch-ui.paused [data-btn=pause] small { color: #2a2010; }
 #touch-ui.paused .top { left: auto; right: calc(12px + var(--sr)); transform: none; }
 #touch-ui.talking .fight, #touch-ui.talking .zone.move, #touch-ui.talking .stick-base, #touch-ui.talking .top { display: none; }
+#touch-ui.calm [data-btn=attack], #touch-ui.calm [data-btn=heavy], #touch-ui.calm [data-btn=grab], #touch-ui.calm [data-btn=heat],
+#touch-ui.calm [data-btn=guard], #touch-ui.calm [data-btn=lockOn] { display: none; }
 #touch-ui.talking .zone.look { width: 100%; }
 #touch-ui.talking [data-btn=interact] { bottom: calc(28px + var(--sb)); right: calc(28px + var(--sr)); min-width: 120px; height: 52px; font-size: 18px; border-radius: 26px; }
 /* the corner HUD is laid out for 1920x1080 and stops shrinking at 0.7 (hud.js): a phone needs it smaller, and the
@@ -78,13 +80,15 @@ html.is-touch #hud .loop-ride { left: auto; right: 38px; bottom: auto; top: 230p
   html.is-touch #start-screen h2 { font-size: 22px; margin-bottom: 6px; }
   html.is-touch #start-screen .lead { margin-bottom: 12px; }
   /* the pause screen: title, map and the three buttons on one landscape screen, the key list replaced by the pad's */
-  html.is-touch #hud .menus .pause { gap: 6px; justify-content: flex-start; padding: calc(6px + env(safe-area-inset-top, 0px)) 12px 8px; overflow: auto; touch-action: pan-y; }
+  html.is-touch #hud .menus .pause { gap: 6px; justify-content: flex-start; padding: calc(6px + env(safe-area-inset-top, 0px)) calc(12px + env(safe-area-inset-right, 0px)) 8px calc(12px + env(safe-area-inset-left, 0px)); overflow: auto; touch-action: pan-y; }
   html.is-touch #hud .menus .pause .k { font-size: 18px; padding: 2px 24px; }
   html.is-touch #hud .menus .pause .body { max-height: none; overflow: visible; }
   html.is-touch #hud .menus .pause .ctl, html.is-touch #hud .menus .pause .hint { display: none; }   /* the buttons are labelled */
   html.is-touch #hud .menus .pause .mapw { padding: 6px 8px 4px; }
   html.is-touch #hud .menus .pause .mh { margin-bottom: 4px; }
-  html.is-touch #hud .menus .pause > .hint + div { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); flex-direction: column; }
+  html.is-touch #hud .menus .pause .legend { justify-content: flex-end; margin-top: 4px; }   /* clear of the credit line at the bottom-left */
+  html.is-touch #hud .menus .pause .side { display: contents; }   /* the key list is hidden; the buttons float at the right edge */
+  html.is-touch #hud .menus .pause .pacts { position: absolute; right: calc(16px + env(safe-area-inset-right, 0px)); top: 50%; transform: translateY(-50%); flex-direction: column; }
   html.is-touch #hud .menus .over .k { font-size: 72px; } html.is-touch #hud .menus .over .r { margin-bottom: 24px; }
 }
 #rotate-hint { position: fixed; inset: 0; z-index: 300; display: none; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
@@ -264,6 +268,7 @@ const touch = {
     if (talking !== this.root.classList.contains('talking')) { this.root.classList.toggle('talking', talking); if (talking) { e.input.virtual.releaseAll(); this.resetStick(); } }
     this.root.classList.toggle('paused', paused);
     this.root.classList.toggle('riding', !!(loop && loop.ride));
+    this.root.classList.toggle('calm', s.mode !== 'combat');      // no fight: no attack / heavy / grab / heat / guard / lock buttons
     this.ui.pause.firstChild.textContent = paused ? '▶' : '☰';
     this.ui.pause.querySelector('small').textContent = paused ? 'ゲームに戻る' : 'メニュー';
     // the E prompt: the story's (話す / 調べる …), LOOP's (乗る / 返却), or a conversation waiting for the next line
@@ -273,14 +278,11 @@ const touch = {
     if (ms && ms.talk) label = '次へ ▶';
     else if (sp && sp.style.opacity !== '0') label = (sp.querySelector('.cap') || {}).textContent || '調べる';
     else if (lp && lp.style.opacity !== '0') label = loop && loop.ride ? '返却' : 'LOOPに乗る';
-    if(loop?.ride) {
-      const zone=loop.returnZone(e.player.position.x,e.player.position.z);
-      label=zone && loop.freeSlots(zone)>0?'返却':loop.ride.pushing?'乗る':'降りる';
+    // riding: 返却 in a bay with room, 降りる anywhere else (the stick pulled back brakes, then backs up)
+    if (loop?.ride) {
+      const zone = loop.returnZone(e.player.position.x, e.player.position.z);
+      label = zone && loop.freeSlots(zone) > 0 ? '返却' : '降りる';
     }
-    const D=this.ui.dodge;
-    D.firstChild.textContent=loop?.ride?(loop.ride.pushing?'乗る':'降りる'):'回避';
-    D.querySelector('small').textContent=loop?.ride?'LOOP':'DODGE';
-    D.setAttribute('aria-label',D.firstChild.textContent);
     const I = this.ui.interact;
     I.hidden = !label || paused;
     if (label && I.firstChild.textContent !== label) I.firstChild.textContent = label;

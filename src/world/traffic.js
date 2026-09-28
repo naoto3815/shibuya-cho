@@ -2147,7 +2147,7 @@ const ROAD_CFG = {
   tamagawa: { n: 3, w: 3.3, v: 15 }, nishiguchi: { n: 1, w: 3.3, v: 9 }, wave: { n: 1, w: 3.2, v: 8 },
   centergai_w_st: { n: 1, w: 3.0, v: 7 }, miyashita_st: { n: 1, w: 3.2, v: 9 },
   // [city] pass 15, the 道玄坂 corridor: 交番前 → 道玄坂上 is 4 lanes; 玉川通り's side road at 道玄坂上 one each way
-  dogenzaka_ue: { n: 2, w: 3.2, v: 11.5 }, tamagawa_ue: { n: 1, w: 3.5, v: 12 },
+  dogenzaka_ue: { n: 2, w: 2.8, v: 11.5 }, tamagawa_ue: { n: 1, w: 3.5, v: 12 },
 };
 function roadCfg(rd) {
   if (rd.busOnly) return { n: rd.lanes || 1, w: 3.3, v: 8, narrow: false, two: false, dirN: null, busOnly: true };
@@ -4669,6 +4669,19 @@ const traffic = {
     //     through at walking pace, and the crowd's push-out steps them aside.
     const dP = this.peopleAhead(c);
     const dC = this._crowd && !c.parked ? this.crowdAhead(c, this._crowd) : 1e9;
+    // (g2) a fight's arena (crowd.arena {x, z, r}): a car outside it stops short of it; one already inside it when the
+    //      fight began drives out (crowd.js 2026-09-28)
+    const arn = this._crowd && this._crowd.arena;
+    if (arn && !c.parked) {
+      const dc = Math.hypot(c.x - arn.x, c.z - arn.z);
+      if (dc > arn.r + 1.5 && dc < arn.r + 32) {
+        const o = _t4b, s0 = c.s + c.l * 0.5, hw = c.w * 0.5 + 0.55;
+        for (let k = 0; k <= 10; k++) {
+          this.pathAt(c, s0 + k * 2, o);
+          if (Math.hypot(o[0] - arn.x, o[1] - arn.z) < arn.r + 1.2) { limS(k ? c.l * 0.5 + k * 2 - hw - 1.2 : -0.5, 'arena', null); break; }
+        }
+      }
+    }
     if (dP < 1e8) limS(dP - half - 1.2, 'person', null);
     let nudge = false, known = false;
     const nowS = this.simT || 0;
@@ -4682,7 +4695,12 @@ const traffic = {
       const walker = !c.pedStill && c.pedVal > 0.35;
       if ((walker ? v < 1.8 : v < 0.6) && K.d > dStopC + 0.5 && dP > 1e8) c.pedWait += step;
       else if ((v > 2.5 && c.pedWait <= PED_WAIT) || K.d <= dStopC) c.pedWait = 0;
-      if ((known && c.pedStill) || c.pedWait > (known ? PED_WAIT_KNOWN : c.pedStill ? PED_WAIT_STILL : PED_WAIT)) { nudge = true; if (m) c.nudgeM = m; }
+      // (a fight's ring of onlookers is a wall: a car outside the arena waits for the fight to end instead of nosing
+      //  through them -- one caught inside it when the fight started is let out. crowd.js 2026-09-28)
+      const ar = this._crowd && this._crowd.arena, po = c.pedObj;
+      const ring = !!(po && po.gawk && !po.gawk.release) && !(ar && Math.hypot(c.x - ar.x, c.z - ar.z) < ar.r + 1.5);
+      if (ring) c.pedWait = 0;
+      if (!ring && ((known && c.pedStill) || c.pedWait > (known ? PED_WAIT_KNOWN : c.pedStill ? PED_WAIT_STILL : PED_WAIT))) { nudge = true; if (m) c.nudgeM = m; }
       else if (walker) limL(c, v, dC - half - 0.4, c.pedVal, 'person', null);
       else limS(dStopC, 'person', null);
     } else {

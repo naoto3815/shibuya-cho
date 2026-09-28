@@ -565,7 +565,7 @@ const props = {
 
     const spots = [];
     for (const r of city.roads || []) {
-      if (r.pedestrian || !r.points) continue;
+      if (r.pedestrian || !r.points || r.id==='dg_koji' || r.id==='scope_osm_46867241_0') continue;
       const cool = r.width >= 14;
       for (let i = 0; i < r.points.length - 1; i++) {
         const a = r.points[i], b = r.points[i + 1];
@@ -574,9 +574,10 @@ const props = {
         const nx = dz / len, nz = -dx / len, o = r.width / 2 + 0.75;
         for (let s = 8; s < len - 4; s += 24) {
           const t = s / len, x = a[0] + dx * t, z = a[1] + dz * t;
-          for (const side of [1, -1]) {
+          for (const side of (r.scope && r.width < 8 ? [1] : [1, -1])) {
             const px = x + nx * o * side, pz = z + nz * o * side;
             if (Math.abs(px) < 25 && Math.abs(pz) < 25) continue;
+            if (r.scope && spots.some(p => Math.hypot(p[0]-px,p[1]-pz)<18)) continue;
             if (!occ.claim(px, pz, 1.5)) continue;
             spots.push([px, pz, Math.atan2(nx * side, nz * side), cool, 1]);
           }

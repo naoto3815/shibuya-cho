@@ -25,6 +25,16 @@
 // one street deep along it (CITY.corridor, dogenzakaData.js; the buildings are buildings/dogenzaka.js).
 import * as THREE from 'three';
 import * as DG from './dogenzakaData.js';
+import {NORTH_BLOCKS} from './udagawaInfill.js';
+import {northRoad,PARCO_CROSSINGS} from './northRoads.js';
+import {ROAD_FRONTAGES} from './roadFrontages.js';
+import {BUNKAMURA_PATH,BUNKAMURA_WIDTH} from './roadLayout.js';
+import {kojiRoad} from './kojiData.js';
+import {SCOPE_ROADS} from './scopeData.js';
+import {SCOPE_OUTLINE} from './scopeProjection.js';
+import {scopeGround} from './scopeTerrain.js';
+import {shotoGround} from './shotoGrade.js';
+import {MARKCITY_VEHICLE_PATH,MARKCITY_WALK_PATH} from './markcityAccess.js';
 
 const PI = Math.PI;
 /** rotY for something whose front points along (dx, dz). */
@@ -69,9 +79,9 @@ const ROADS = [
   // OSM point. The 109 fork node (−112, −3) is kept (traffic / junction topology), the line joins OSM by x −140.
   // pass 15 (the corridor): the compressed bend is gone. The head to x −180 is unchanged; from there the true OSM
   // centre-line runs up to 道玄坂上交番前 (−396.3, 219.5), 385 m from the 109 fork (dogenzakaData.js DOGEN_PATH).
-  { id: 'dogenzaka', name: '道玄坂', path: DG.DOGEN_PATH, width: 16, lanes: 2, sidewalk: 4, oneway: false, slope: 0.047 },
+  { id: 'dogenzaka', name: '道玄坂', path: DG.DOGEN_PATH, width: 13.5, lanes: 2, sidewalk: 4, oneway: false, slope: 0.047 },
   // 交番前 → 道玄坂上: 4 lanes (OSM lanes=4), 14 m between the kerbs, 3.5 m pavements (OSM sidewalk lines 8.1–9.8 m off)
-  { id: 'dogenzaka_ue', name: '道玄坂', path: DG.DOGEN_UE_PATH, width: 14, lanes: 4, sidewalk: 3.5, oneway: false },
+  { id: 'dogenzaka_ue', name: '道玄坂', path: DG.DOGEN_UE_PATH, width: 12, lanes: 4, sidewalk: 3.5, oneway: false },
   // 玉川通り (国道246) at 道玄坂上: the east-bound side road's line through the junction, two-way for the game's traffic
   // (the real west-bound side road beside it, the underpass and the 首都高 over them are drawn by buildings/dogenzaka.js)
   { id: 'tamagawa_ue', name: '玉川通り', path: DG.TAMAGAWA_UE_PATH, width: 10, lanes: 2, sidewalk: 0, oneway: false },
@@ -80,7 +90,7 @@ const ROADS = [
   // the side streets' mouths along the corridor (no traffic: asphalt, kerbs, lamps and poles only)
   ...DG.SIDE_STREETS.map((s) => ({ id: s.id, name: s.name, path: s.path, width: s.width, lanes: 1, sidewalk: 0, oneway: !!s.oneway, traffic: false, side: true })),
   // 文化村通り leaves the 109 apex west-north-west toward Bunkamura / 東急本店 (off-map).
-  { id: 'bunkamura', name: '文化村通り', path: [[-112, -14], [-136, -27], [-180, -47], [-203, -65], [-216, -82], [-226, -96]], width: 14, lanes: 2, sidewalk: 4, oneway: false },
+  { id: 'bunkamura', name: '文化村通り', path: BUNKAMURA_PATH, width: BUNKAMURA_WIDTH, lanes: 2, sidewalk: 3, oneway: false },
   // South arm (real: 神宮通り south of the scramble, OSM 2026-09). A divided road around the 西口 bus terminal:
   //   南行 3 lanes along the station side (bus stops 29–33 on its east kerb, the 渋谷駅街区 construction hoarding behind),
   //   北行 1 lane + a kerb/bus lane along 渋谷駅前ビル / Mark City (stops 0–5 on its west kerb, 西口通り / ウェーヴ通り leave it
@@ -170,7 +180,7 @@ const CROSSWALKS_EXTRA = [
 // (left-hand traffic: the half on the left of each direction of travel).
 // (a zebra across a side road at a junction sits where the walkers' pavement line along 道玄坂 crosses that road —
 // the crowd walks an offset of the main road, not the real pavement's kink into the side street)
-const DG_PAVE = [['dogenzaka', 8 + 2 + 0.2], ['dogenzaka_ue', 7 + 1.75 + 0.2]];
+const DG_PAVE = ['dogenzaka','dogenzaka_ue'].map(id=>{const r=ROADS.find(r=>r.id===id);return [id,r.width/2+r.sidewalk/2+.2];});
 function segHit(a, b, c, d) {
   const r = [b[0] - a[0], b[1] - a[1]], s = [d[0] - c[0], d[1] - c[1]], den = r[0] * s[1] - r[1] * s[0];
   if (Math.abs(den) < 1e-9) return null;
@@ -423,6 +433,7 @@ const STATION_SOUTH = {
   opening: [[98.6, 90.1], [102.4, 99.3]],
 };
 const GROUND_HOLES = [
+  {id:'shinsen_rail_cutting',x0:-646,z0:240,x1:-578,z1:258},
   { id: 'higashiguchi', x0: 108.5, z0: 91, x1: 115, z1: 94.5 },   // JR 東口 前: escalators down to the 地下鉄 gates
   { id: 'uc', x0: 140, z0: 96, x1: 146.5, z1: 99.5 },             // Scramble Square 東口 アーバン・コア: escalators to B1/B2
   { id: 'exit15', x0: 149.5, z0: 116, x1: 155.5, z1: 119.5 },     // 東京メトロ 渋谷駅 15番出口 (明治通り): stair
@@ -452,14 +463,14 @@ const RAIL = {
 // [x, z]; size is the real-proportion bounding box [w, h, d]). storeys = above-ground floors.
 const LANDMARKS = {
   shibuya109: {
-    name: 'SHIBUYA 1O9', real: 'SHIBUYA 109', pos: [-163, -13], rotY: facing(132, 8), footprint: 'wedge',
+    name: 'SHIBUYA ARC', real: 'SHIBUYA 109', pos: [-163, -13], rotY: facing(132, 8), footprint: 'wedge',
     size: [63, 42, 51], storeys: 10,
     polygon: [[-132, -8], [-136, -14], [-142, -19], [-150, -13], [-161, -27], [-184, -39], [-195, -24], [-195, -17], [-185, -2], [-179, 12], [-137, -1]],
     // (pass 12: the drum on the real tip — OSM 55895868's apex curve — 20 m across; the old 30 m one centred 6 m back
     // stood 2.9 m into 道玄坂's carriageway)
     cylinder: { center: [-140.8, -9.8], radius: 10 },
     screen: { w: 10, h: 6, faces: facing(132, 8), name: '109フォーラムビジョン' },
-    notes: 'Wedge podium between 道玄坂 (south) and 文化村通り (north); silver corrugated cylinder at the east apex with the red-white "109" band on floors 9–10 and the entrance recess at the tip facing the crossing.',
+    notes: 'Contemporary exterior: silver square-panel cylinder, open gold entrance truss and side stair; original ARC identity and fictional campaign. See docs/reports/109-exterior.md.',
   },
   qfront: {
     name: 'Q-FRONT', pos: [-18, -43], rotY: facing(0.25, 0.97), footprint: 'polygon', size: [36, 35, 28], storeys: 8,
@@ -779,7 +790,7 @@ export const CITY = {
     stopLines: STOP_LINES,
     signals: SIGNALS,
   },
-  roads: ROADS,
+  roads: [...ROADS, ...SCOPE_ROADS.filter(r=>r.osm!==153108795).map(kojiRoad)].map(northRoad).filter(Boolean).map(r=>r.id==='dg_markcity_p'?{...r,path:MARKCITY_VEHICLE_PATH,width:7,lanes:2,oneway:false}:r),
   busways: BUSWAYS,
   busStops: BUS_STOPS,
   busTerminals: BUS_TERMINALS,
@@ -789,14 +800,14 @@ export const CITY = {
   aprons: APRONS,
   raised: RAISED,
   sites: SITES,
-  crosswalksExtra: CROSSWALKS_EXTRA,
-  pedestrianStreets: PEDESTRIAN_STREETS,
+  crosswalksExtra: [...CROSSWALKS_EXTRA,...PARCO_CROSSINGS],
+  pedestrianStreets: [...PEDESTRIAN_STREETS,{id:'markcity_avenue',name:'マークシティ 4階入口',path:MARKCITY_WALK_PATH,width:3,surface:'paving',poles:false,trees:false}],
   plazas: PLAZAS,
   rail: RAIL,
   groundHoles: GROUND_HOLES,
   stationSouth: STATION_SOUTH,
   landmarks: LANDMARKS,
-  blocks: BLOCKS,
+  blocks: BLOCKS.map(b=>NORTH_BLOCKS[b.id]||ROAD_FRONTAGES[b.id]?{...b,polygon:NORTH_BLOCKS[b.id]||ROAD_FRONTAGES[b.id]}:b),
   spawns: {
     player: { pos: [22, 20], rotY: facing(-26, -22) },                       // Hachiko square, looking at the crossing
     fight_intro: [[-8, -4], [-14, 2], [-2, -10], [-20, -8], [4, 4]],          // on the scramble itself
@@ -811,9 +822,14 @@ export const CITY = {
   // (the city's walls follow it outside the square), `roads` = the ids laid in it, `koban` = 道玄坂上交番.
   corridor: { id: 'dogenzaka', name: '道玄坂', outline: DG.CORRIDOR, roads: ['dogenzaka', 'dogenzaka_ue', 'tamagawa_ue'], koban: DG.KOBAN, halfWidth: DG.CORR_HW },
   // named areas the HUD checks before the streets (道玄坂上 round the koban and the junction)
-  areas: DG.AREAS,
+  areas: [...DG.AREAS,
+    { name:'神泉',polygon:[[-760,210],[-615,210],[-595,410],[-700,400]] },
+    { name:'円山町',polygon:[[-700,40],[-440,40],[-440,310],[-615,310],[-615,210],[-740,210]] },
+    { name:'百軒店',polygon:[[-420,-25],[-255,-25],[-255,90],[-400,180],[-460,120]] },
+  ],
   // the pause map's frame [x0, z0, x1, z1]: the square and the corridor up to 道玄坂上
-  worldMapBox: [-545, -230, 232, 455],
+  worldMapBox: [-780, -320, 240, 455],
+  scope: { outline: SCOPE_OUTLINE, source: 'user red outline, 2026-09-27' },
 };
 /** True if (x, z) is inside the 道玄坂 corridor's outline (true-metre corridor west of the square). */
 export function inCorridor(x, z) { return pointInPolygon(x, z, CITY.corridor.outline); }
@@ -823,14 +839,14 @@ const v3 = (x, z) => new THREE.Vector3(x, groundY(x, z), z);
 
 /** [{id, name, points:[Vector3...], width, lanes, sidewalk, oneway}] */
 export function roadPolylines() {
-  return ROADS.map(r => ({ id: r.id, name: r.name, points: r.path.map(([x, z]) => v3(x, z)), width: r.width, lanes: r.lanes, sidewalk: r.sidewalk, oneway: !!r.oneway }));
+  return CITY.roads.map(r => ({ id: r.id, name: r.name, points: r.path.map(([x, z]) => v3(x, z)), width: r.width, lanes: r.lanes, sidewalk: r.sidewalk, oneway: !!r.oneway }));
 }
 
 /** [{a: Vector3, b: Vector3, width, side:'left'|'right', roadId}] — one slab per road segment per side,
  *  offset by width/2 + sidewalk/2. 'right' = right-hand side when travelling a→b (map north up). */
 export function sidewalks() {
   const out = [];
-  for (const r of ROADS) {
+  for (const r of CITY.roads) {
     if (!r.sidewalk) continue;
     const off = r.width / 2 + r.sidewalk / 2;
     for (let i = 0; i < r.path.length - 1; i++) {
@@ -879,7 +895,7 @@ function distToSegment(px, pz, ax, az, bx, bz) {
 export function isRoad(x, z) {
   const c = CITY.crossing;
   if (Math.hypot(x - c.center[0], z - c.center[1]) <= c.radius) return true;
-  for (const r of ROADS) {
+  for (const r of CITY.roads) {
     const half = r.width / 2;
     for (let i = 0; i < r.path.length - 1; i++) {
       const [ax, az] = r.path[i], [bx, bz] = r.path[i + 1];
@@ -1004,12 +1020,13 @@ function rampY(s, x, z) {
   else h = s.rise * (along - e / 2);
   return h * w;
 }
-export function groundY(x, z) {
+export function legacyGroundY(x, z) {
   if (!SLOPED) return 0;
   let y = 0;
   for (let i = 0; i < RAMPS.length; i++) { const h = rampY(RAMPS[i], x, z); if (h > y) y = h; }
   return y;
 }
+export function groundY(x,z) { return shotoGround(x,z,scopeGround(x,z,legacyGroundY(x,z))); }
 
 /** Convert world (x, z) to minimap pixels (north up, origin at the image centre). */
 export function worldToMinimap(x, z) {

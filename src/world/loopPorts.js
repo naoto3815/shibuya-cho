@@ -12,7 +12,7 @@ export const LOOP_FARE = { base: 50, perMin: 15, towFee: 1000 };   // ¥50 + ¥1
 // than 健人 walking (2.4 m/s) on a pavement and no faster than his run (5.6 m/s) on the road — the client: 「遅すぎる」.
 // Then 「車道と歩道でスピードに差つけなくて良い。時速50キロにして」: one cap everywhere, 50 km/h (~2.5× his run).
 // (Both keys stay so a split can come back by changing one number.)
-export const LOOP_SPEED = { road: 50, pavement: 50 };
+export const LOOP_SPEED = { road: 70, pavement: 70 };   // client 2026-09-28: 最大速度70km
 
 export const LOOP_SOURCE = 'gameplay evenly spaced network, 2026-09-27';
 export const LOOP_SPACING = 100;

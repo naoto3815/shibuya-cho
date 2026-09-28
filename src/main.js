@@ -18,6 +18,7 @@ const MODULES = [
   ['player', './characters/player.js'], ['loop', './world/loop.js'], ['enemy', './characters/enemy.js'], ['combat', './combat/combat.js'],
   ['heatActions', './combat/heatActions.js'], ['camera', './camera/camera.js'], ['postfx', './render/postfx.js'],
   ['hud', './ui/hud.js'], ['menus', './ui/menus.js'], ['audio', './audio/audio.js'], ['missions', './story/missions.js'],
+  ['shinsen', './world/shinsen.js'],
   ['touch', './ui/touchControls.js'],   // [mobile] on-screen controls (inert unless a touch device or ?touch=1)
 ];
 

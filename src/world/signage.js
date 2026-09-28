@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import { CANVAS_K } from '../core/mobileProfile.js';
+import { groundY } from './cityData.js';
 
 const F = {
   gothic: '"Hiragino Sans", "Hiragino Kaku Gothic ProN", "Noto Sans JP", "Yu Gothic", Meiryo, sans-serif',
@@ -453,22 +454,6 @@ function paintTaxi(ctx, x, y, w, h, o) {
   const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(255,255,255,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0.15)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
   ctx.fillStyle = o.fg || '#111'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const s = fit(ctx, o.text, w * 0.86, h * 0.7, '800', famFor(o.text, o.font)); ctx.font = `800 ${s}px ${famFor(o.text, o.font)}`; ctx.fillText(o.text, w / 2, h * 0.52);
-}
-// "SHIBUYA 1O9" band wrapped around the cylinder
-function paint109(ctx, x, y, w, h, o) {
-  ctx.fillStyle = '#f4f4f2'; ctx.fillRect(0, 0, w, h);
-  const g = ctx.createLinearGradient(0, 0, 0, h); g.addColorStop(0, 'rgba(255,255,255,0.3)'); g.addColorStop(1, 'rgba(0,0,0,0.12)'); ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
-  ctx.fillStyle = '#c8102e'; ctx.fillRect(0, 0, w, h * 0.07); ctx.fillRect(0, h * 0.93, w, h * 0.07);
-  ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
-  const n = o.repeat || 2; const seg = w / n;
-  for (let i = 0; i < n; i++) {
-    const x0 = seg * i;
-    ctx.fillStyle = '#6a6f78'; ctx.font = `700 ${h * 0.3}px ${F.helv}`; const sw = ctx.measureText('SHIBUYA').width;
-    ctx.fillStyle = '#c8102e'; ctx.font = `800 ${h * 0.66}px ${F.maru}`; const nw = ctx.measureText('1O9').width;
-    const total = sw + nw + h * 0.18; const sx = x0 + (seg - total) / 2;
-    ctx.fillStyle = '#6a6f78'; ctx.font = `700 ${h * 0.3}px ${F.helv}`; ctx.fillText('SHIBUYA', sx, h * 0.5);
-    ctx.fillStyle = '#c8102e'; ctx.font = `800 ${h * 0.66}px ${F.maru}`; ctx.fillText('1O9', sx + sw + h * 0.18, h * 0.5);
-  }
 }
 function paintCenterGai(ctx, x, y, w, h, o) {
   ctx.fillStyle = '#e8306a'; ctx.fillRect(0, 0, w, h);
@@ -1045,13 +1030,13 @@ function decorateShop(f, rng) {
   if (foodish && rng.chance(0.42)) {
     const [txt, bg, fg] = rng.pick(POOL.flags);
     const g = makeFlag({ text: txt, bg, fg, band: rng.chance(0.4) ? '#ffffff' : null, w: 0.55, h: 1.7, font: rng.chance(0.4) ? F.mincho : null });
-    const pos = f.position.clone().addScaledVector(t, rng.range(-W / 2 + 0.7, W / 2 - 0.7)).addScaledVector(f.normal, 0.55); pos.y = 0.15;
+    const pos = f.position.clone().addScaledVector(t, rng.range(-W / 2 + 0.7, W / 2 - 0.7)).addScaledVector(f.normal, 0.55); pos.y = groundY(pos.x, pos.z) + 0.15;
     stageAdd(g, pos, f.normal);
   }
   if (/food|cafe|bar/.test(cat) && rng.chance(0.45)) {
     const m = rng.pick(POOL.menus);
     const g = makeMenuBoard({ ...m, bg: cat === 'cafe' ? '#2a2420' : '#1c1a18' });
-    const pos = f.position.clone().addScaledVector(t, rng.range(-W / 2 + 1.2, W / 2 - 1.2)).addScaledVector(f.normal, 0.75); pos.y = 0.15;
+    const pos = f.position.clone().addScaledVector(t, rng.range(-W / 2 + 1.2, W / 2 - 1.2)).addScaledVector(f.normal, 0.75); pos.y = groundY(pos.x, pos.z) + 0.15;
     stageAdd(g, pos, f.normal);
   }
   const pNeon = cat === 'bar' ? 0.75 : cat === 'karaoke' || cat === 'amuse' ? 0.5 : cat === 'cafe' || cat === 'food' ? 0.3 : 0.06;
@@ -1139,18 +1124,8 @@ function landmarkSigns(city, rng) {
       stageAdd(m, lmWorld(q, q.anchors.roofSign), lmDir(q, q.anchors.roofSignNormal, new THREE.Vector3(0.25, 0, 0.97))); out.names++;
     }
   }
-  // SHIBUYA 1O9: forum vision + entrance ticker
-  const s109 = L.shibuya109;
-  if (s109 && s109.anchors && s109.anchors.screen) {
-    const size = s109.anchors.screenSize || [9.6, 5.8];
-    ledAt(lmWorld(s109, s109.anchors.screen), lmDir(s109, s109.anchors.screenNormal, new THREE.Vector3(1, 0, 0)), size[0], size[1], 3, '109フォーラムビジョン', rot(3)); out.leds++;
-    if (s109.anchors.entrance) {
-      const n = lmDir(s109, s109.anchors.screenNormal, new THREE.Vector3(1, 0, 0));
-      const p = lmWorld(s109, s109.anchors.entrance); p.y += 0.9;
-      const tk = makeLedTicker({ w: 9, h: 0.6, text: 'SHIBUYA 1O9 ▶ 本日 10:00–21:00 ▶ 新作 秋物 コレクション 入荷 ▶ 1O9 SUMMER SALE 最大 70% OFF ▶ ', color: '#ff4d6d', speed: 90 });
-      stageAdd(tk, p, n);
-    }
-  }
+  // The 109 architectural model owns its original static campaign and entrance identity.
+  // Forum Vision belongs to MAGNET, not the Dogenzaka cylinder.
   // MAGNET: corner LED
   const mg = L.magnet;
   if (mg && mg.anchors && mg.anchors.screen) { const size = mg.anchors.screenSize || [14, 10]; ledAt(lmWorld(mg, mg.anchors.screen), lmDir(mg, mg.anchors.screenNormal, new THREE.Vector3(-0.85, 0, 0.52)), size[0], size[1], 5, '109フォーラムビジョン', rot(5)); out.leds++; }
@@ -1256,7 +1231,7 @@ function cornerFurniture(city) {
   for (const [k, exit] of totems) { const c = corners[k]; if (!c) continue; stageAdd(makeMetroTotem({ exit }), back(c, 3.2), toward(c)); n++; }
   const guides = [
     ['hachiko', [{ jp: 'ハチ公前広場', en: 'Hachiko Square', dir: 'right' }, { jp: '渋谷町駅 ハチ公口', en: 'Shibuya-cho Sta. Hachiko Exit', dir: 'right' }, { jp: 'センター街', en: 'Center-gai', dir: 'left' }]],
-    ['sanzenri', [{ jp: 'センター街', en: 'Center-gai', dir: 'right' }, { jp: '道玄坂 ・ SHIBUYA 1O9', en: 'Dogenzaka', dir: 'left' }, { jp: '渋谷町駅', en: 'Shibuya-cho Sta.', dir: 'down' }]],
+    ['sanzenri', [{ jp: 'センター街', en: 'Center-gai', dir: 'right' }, { jp: '道玄坂 ・ SHIBUYA ARC', en: 'Dogenzaka', dir: 'left' }, { jp: '渋谷町駅', en: 'Shibuya-cho Sta.', dir: 'down' }]],
     ['qfront', [{ jp: '公園通り ・ 渋谷PALCO', en: 'Koen-dori / PALCO', dir: 'up' }, { jp: '宮下パーク', en: 'Miyashita Park', dir: 'right' }, { jp: 'ハチ公前広場', en: 'Hachiko Square', dir: 'down' }]],
   ];
   for (const [k, rows] of guides) {

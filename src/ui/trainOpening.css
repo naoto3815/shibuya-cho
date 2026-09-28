@@ -23,3 +23,9 @@ body.train-playing #hud{visibility:hidden}body.train-playing #game{pointer-event
 #train-opening .train-resume{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);padding:16px 24px;background:#080b10ed}
 @media(max-width:600px){#train-opening .train-frame{inset:15% 0 24%}#train-opening .train-caption{bottom:16%;left:5%;right:5%}#train-opening .train-location{top:11%;font-size:10px}#train-opening .train-card{inset:10% 6% 18%}#train-opening .train-card h1{font-size:21px;letter-spacing:.04em}#train-opening .train-card p{font-size:16px;letter-spacing:.04em}#train-opening .train-controls{bottom:4%}}
 @media(max-height:480px){#train-opening .train-frame{inset:0 0 14%}#train-opening .train-location{top:5%}#train-opening .train-caption{bottom:9%}#train-opening .train-card small{margin-bottom:8px}#train-opening .train-card p,#train-opening .train-card span{margin-top:12px}#train-opening .train-controls{bottom:2%}#train-opening button{padding:6px 12px}}
+
+/* The approved edit already contains titles, captions, fades and its complete mix. */
+#train-opening[data-mastered="true"] .train-frame{inset:0}
+#train-opening[data-mastered="true"] .train-shade,
+#train-opening[data-mastered="true"] .train-caption,
+#train-opening[data-mastered="true"] .train-location{display:none}
