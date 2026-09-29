@@ -2913,8 +2913,65 @@ function studentBodyY(y) {
   if (y <= 0.08 || y >= 1.52) return y;
   return y + 0.08 * (y <= 0.98 ? (y - 0.08) / 0.90 : (1.52 - y) / 0.54);
 }
-function studentJoints(joints) {
-  return Object.fromEntries(Object.entries(joints).map(([name, p]) => [name, [p[0], studentBodyY(p[1]), p[2]]]));
+// 2026-09-28 (client: 「みんな短足なので、通行人の足を長くして」): every other passer-by's legs are longer. Built at the
+// rig's 1.82 m, the scans all stood on the same joint heights (hip joints 0.955, knees 0.50: 52 % of the crown, the
+// average adult, which the street read as short-legged). PED_LEGS stretches the legs between the ankle (y0, so no
+// shoe grows) and the crotch (y1) by dL, and takes dT of it back from the torso between t0 and t1 (the waist to the
+// chest): the hip joints at 0.55 of the crown instead of 0.52, the crotch / a skirt's hem at ~0.50. The person keeps
+// the height PED_SCANS gives (V.scale divides by the longer crown), so the head and torso read a little smaller.
+// Each vertex moves by its bones: a leg bone's share by the stretch at its height, the pelvis / spine share by the
+// torso field (a skirt, a coat's hem, a bag on the hip ride up with the pelvis, whole), the neck, head, shoulders and
+// arms by the shift at the shoulder line (arms, hands and what they hold keep their length). The Hips JOINT stays at
+// the clips' 0.98: the pelvis bone's origin is where every clip's Hips.position track puts it, and the hip joints,
+// the spine and everything above sit dL higher off it, so every clip (walk, idle, story poses, bus rides) stands on
+// the ground unchanged with no per-clip pelvis offset. (high_school_student_5828 keeps her own redistribution above.)
+export const PED_LEGS = { dL: 0.085, dT: 0.025, y0: 0.09, y1: 0.84, t0: 1.00, t1: 1.45 };
+const PL = PED_LEGS, PL_E = PL.dL / (PL.y1 - PL.y0), PL_C = PL.dT / (PL.t1 - PL.t0);
+const legField = (y) => (y <= PL.y0 ? 0 : y >= PL.y1 ? PL.dL : PL_E * (y - PL.y0));                          // leg bones
+const torsoField = (y) => PL.dL - (y <= PL.t0 ? 0 : y >= PL.t1 ? PL.dT : PL_C * (y - PL.t0));               // pelvis / spine
+const legStretch = (y) => (y > PL.y0 && y < PL.y1 ? 1 + PL_E : 1), torsoStretch = (y) => (y > PL.t0 && y < PL.t1 ? 1 - PL_C : 1);
+const PED_LEG_BONES = new Set(['LeftUpLeg', 'LeftLeg', 'LeftFoot', 'LeftToeBase', 'RightUpLeg', 'RightLeg', 'RightFoot', 'RightToeBase']);
+const PED_TORSO_BONES = new Set(['Hips', 'Spine', 'Spine1', 'Spine2']);
+// how far a joint of that bone moves up, and the crown with it (V.scale)
+const pedJointDY = (name, y) => (name === 'Hips' ? 0 : PED_LEG_BONES.has(name) ? legField(y) : PED_TORSO_BONES.has(name) ? torsoField(y) : PL.dL - PL.dT);
+const pedLong = (key) => key !== 'high_school_student_5828';
+// how far the pelvis's mesh sits above the Hips joint's bind (rig metres): what a seat carries is that much higher
+// (crowdScan.js bakes the bus_sit anchor there)
+const pedPelvisUp = (key) => (pedLong(key) ? PL.dL : studentBodyY(0.98) - 0.98);
+function pedJoints(key, joints) {
+  // (the student: her redistribution, the Hips joint held at the clips' 0.98 all the same)
+  if (!pedLong(key)) return Object.fromEntries(Object.entries(joints).map(([name, p]) => [name, [p[0], name === 'Hips' ? p[1] : studentBodyY(p[1]), p[2]]]));
+  return Object.fromEntries(Object.entries(joints).map(([name, p]) => [name, [p[0], p[1] + pedJointDY(name, p[1]), p[2]]]));
+}
+// the remapped positions / normals of one scan part, per scan and part (every body of that person shares them)
+const PED_LONG_GEO = new Map();
+function pedLongGeo(geo, key, part) {
+  const ck = key + ':' + part;
+  let c = PED_LONG_GEO.get(ck);
+  if (!c) {
+    const P = geo.attributes.position, N = geo.attributes.normal, si = geo.attributes.skinIndex, sw = geo.attributes.skinWeight, n = P.count;
+    const pos = new Float32Array(n * 3), nrm = N ? new Float32Array(n * 3) : null;
+    for (let i = 0; i < n; i++) {
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      let dy = 0, sy = 0, ws = 0;
+      for (let k = 0; k < 4; k++) {
+        const w = sw.getComponent(i, k); if (!(w > 0)) continue;
+        const b = BONE_NAMES[si.getComponent(i, k)];
+        if (PED_LEG_BONES.has(b)) { dy += w * legField(y); sy += w * legStretch(y); }
+        else if (PED_TORSO_BONES.has(b)) { dy += w * torsoField(y); sy += w * torsoStretch(y); }
+        else { dy += w * (PL.dL - PL.dT); sy += w; }
+        ws += w;
+      }
+      if (ws > 0) { dy /= ws; sy /= ws; } else sy = 1;
+      pos[i * 3] = x; pos[i * 3 + 1] = y + dy; pos[i * 3 + 2] = z;
+      // a vertical stretch by sy turns the normal by the inverse transpose: (nx, ny / sy, nz)
+      if (nrm) { const a = N.getX(i), b = N.getY(i) / sy, d = N.getZ(i), l = Math.hypot(a, b, d) || 1; nrm[i * 3] = a / l; nrm[i * 3 + 1] = b / l; nrm[i * 3 + 2] = d / l; }
+    }
+    PED_LONG_GEO.set(ck, c = { pos, nrm });
+  }
+  geo.setAttribute('position', new THREE.BufferAttribute(c.pos, 3));
+  if (c.nrm) geo.setAttribute('normal', new THREE.BufferAttribute(c.nrm, 3));
+  geo.computeBoundingBox(); geo.computeBoundingSphere();
 }
 export function gaitPose(h, gait = h && h.gait, clip = null) {
   if (!h || !gait) return;
@@ -2932,7 +2989,7 @@ export function gaitPose(h, gait = h && h.gait, clip = null) {
   const B = h.bones;
   for (const n of GAIT_LEGS) if (B[n]) B[n].quaternion.slerp(RIG.local[n].quaternion, 1 - g);
   const hp = B.Hips.position, r = RIG.local.Hips.position;
-  hp.x = r.x + (hp.x - r.x) * g; hp.z = r.z + (hp.z - r.z) * g; hp.y = r.y + (hp.y - r.y) * g * g + (h.ped === 'high_school_student_5828' ? 0.08 : 0);
+  hp.x = r.x + (hp.x - r.x) * g; hp.z = r.z + (hp.z - r.z) * g; hp.y = r.y + (hp.y - r.y) * g * g;
 }
 // 30 % toward their own luminance (fix round 1): at full chroma a track top was the loudest thing in any frame
 const CHINPIRA_JACKETS = [0xb1377a, 0xd7c767, 0x51b0cc, 0xbc5341, 0x7856bb];
@@ -4069,7 +4126,7 @@ function loadScanAsset(name, base, file, withRegion, mob = false, cast = null) {
       catch(error){ console.warn('[hero] approved face texture unavailable',error); }
     }
     const V = VARIANTS[name];
-    if (V) { V.joints = name === 'ped_high_school_student_5828' ? studentJoints(json.joints) : json.joints; V.scan = name; }
+    if (V) { V.joints = V.ped ? pedJoints(V.ped, json.joints) : json.joints; V.scan = name; }
     SC.state = 'ready';
     return SC;
   })().catch((e) => { SC.state = 'failed'; console.warn(`[humanoid] scan "${name}" unavailable:`, e.message); return null; });
@@ -4147,6 +4204,7 @@ function buildMobBody(V, R, detail, stance, part, SC) {
     geo.setAttribute('normal', geo.getAttribute('normal').clone());
     geo.computeVertexNormals(); geo.computeBoundingBox(); geo.computeBoundingSphere();
   }
+  else if (V.ped) pedLongGeo(geo, V.ped, part);
   // a pedestrian keeps what she carries (the handbag, the backpack, the cup ride their bones: buildPed.mjs)
   if (V.ped) { if (PED_BONES) pedBoneColours(geo); return { geo, mats: SC.mat, tris: geo.index.count / 3, skin: null }; }
   if (V.cast) {
@@ -6100,7 +6158,7 @@ export function createHumanoid({ variant = 'kento', seed = 1, getClip = null, de
   const glb = !!MOB || !!(V.glb && HERO.state === 'ready');
   // the measured joints are already 1.82 m tall; a pedestrian scan is BUILT at 1.82 m (the clips' own rig) and shrunk
   // to the person here, so the walk's hips height and leg IK land exactly as authored
-  if (glb) V.scale = MOB && V.ped ? (V.pedHeight || MOB.data.height || 1.82) / (MOB.data.built || 1.82)
+  if (glb) V.scale = MOB && V.ped ? (V.pedHeight || MOB.data.height || 1.82) / ((MOB.data.built || 1.82) + (pedLong(V.ped) ? PL.dL - PL.dT : 0))
     : MOB && V.cast ? (V.castHeight || MOB.data.height || 1.82) / (MOB.data.built || 1.82) : variant === 'kento' ? HERO_HEIGHT / HERO_ASSET_HEIGHT : 1;   // scans retain their authored bind rig
   else delete V.joints;                                           // scan missing -> generic rig + procedural body
   if (V.ped && !MOB && !createHumanoid._pedWarned) { createHumanoid._pedWarned = true; console.warn(`[humanoid] ${variant} built before its scan loaded (await pedScansReady())`); }
@@ -6267,7 +6325,7 @@ export function createHumanoid({ variant = 'kento', seed = 1, getClip = null, de
     idleBreak: brk,
     scan: MOB ? V.scan : null,
     cast: !!(MOB && V.cast),                         // a story-cast scan (hero v2, 柊): enemy.js leaves its body as built
-    ped: V.ped && MOB ? V.ped : null, part: MOB ? part0 : null, gait: V.ped && MOB ? (V.gait || null) : null,
+    ped: V.ped && MOB ? V.ped : null, pelvisUp: V.ped && MOB ? pedPelvisUp(V.ped) : 0, part: MOB ? part0 : null, gait: V.ped && MOB ? (V.gait || null) : null,
     neckHeadBind, handBind,
     _ov: new Map(),                                  // per-bone overlay memory (see overlay())
     group, skinned, skeleton, bones: byName, mixer, variant, seed, tris, drawCalls: Array.isArray(mats) ? mats.length : 1, keyRig, contact, clearance, stance, lod: lodRoot, meshes,

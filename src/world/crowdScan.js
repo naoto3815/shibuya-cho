@@ -351,22 +351,7 @@ export class CrowdScan {
       a.reset(); a.setLoop(THREE.LoopRepeat, Infinity); a.setEffectiveTimeScale(1); a.setEffectiveWeight(1); a.play();
       // walk / brisk: the stance knee at mid-stance, measured over the cycle first, sets this scan's pelvis lift
       let lift = 0;
-      if (d.id === 0 || d.id === 4) {
-        let phi = 0, best = 1e9, la = 0, lb = 0;
-        for (let k = 0; k < d.F; k++) {
-          a.time = (k / d.F) * d.dur; mixer.update(0); tunePose(h, bind, TUNE[d.id], 1); h.group.updateMatrixWorld(true);
-          const Lw = h.bones.LeftFoot.matrixWorld.elements, Rw = h.bones.RightFoot.matrixWorld.elements, sL = Lw[13] <= Rw[13], st = sL ? 'Left' : 'Right';
-          const hip = h.bones.Hips.matrixWorld.elements, under = Math.abs((sL ? Lw : Rw)[14] - hip[14]);
-          if (under < best) {
-            best = under;
-            _kA.setFromMatrixPosition(h.bones[st + 'UpLeg'].matrixWorld); _kB.setFromMatrixPosition(h.bones[st + 'Leg'].matrixWorld); _kC.setFromMatrixPosition(h.bones[st + 'Foot'].matrixWorld);
-            la = _kA.distanceTo(_kB); lb = _kB.distanceTo(_kC);
-            _kC.sub(_kB); _kB.sub(_kA); phi = _kB.angleTo(_kC) * 180 / Math.PI;
-          }
-        }
-        lift = kneeLift(la, lb, phi);
-        (liftLog[d.id] = { lift, phi });
-      }
+      if (d.id === 0 || d.id === 4) { const L = measureLift(h, a, d, bind); lift = L.lift; liftLog[d.id] = L; }
       for (let k = 0; k < d.F; k++) {
         a.time = (k / d.F) * d.dur;
         mixer.update(0);
@@ -379,6 +364,12 @@ export class CrowdScan {
         if (d.pose && k === 0) {
           const b = h.bones[d.name === 'bus_sit' ? 'Hips' : 'RightHand'];
           if (b) anchors[d.name] = _v.setFromMatrixPosition(b.matrixWorld).toArray();
+          // (the longer-legged pedestrian's pelvis mesh rides h.pelvisUp above its Hips joint: the seat takes that point)
+          const j = bones.indexOf(b);
+          if (d.name === 'bus_sit' && h.pelvisUp && j >= 0) {
+            const M = _pm.copy(inv[j]).invert().elements;
+            anchors[d.name] = _v.set(M[12], M[13] + h.pelvisUp, M[14]).applyMatrix4(inv[j]).applyMatrix4(b.matrixWorld).toArray();
+          }
         }
         const f = d.base + k;
         for (let j = 0; j < NB; j++) { _m.multiplyMatrices(bones[j].matrixWorld, inv[j]); _m.toArray(mats, (f * NB + j) * 16); }
@@ -813,6 +804,7 @@ export class CrowdScan {
     _tune.thigh = thA * (1 - wB) + thB * wB; _tune.hip = hpA * (1 - wB) + hpB * wB;
     _tune.arms = (tA ? tA.arms : 0) * (1 - wB) + (tB ? tB.arms : 0) * wB;
     _tune.spine = (tA ? tA.spine : 0) * (1 - wB) + (tB ? tB.spine : 0) * wB;
+    _tune.line = (tA ? tA.line || 0 : 0) * (1 - wB) + (tB ? tB.line || 0 : 0) * wB;
     tunePose(H.h, S.bind, _tune, 1);
     // the bake's pelvis lift (liftLegs), by the walk / brisk share of the pose; the pool body is at H.base x _si of the
     // bake's size
@@ -1158,20 +1150,21 @@ export class CrowdScan {
 // pedestrian's 1.3 m/s) and the idle his yakuza stand (feet wide, chest out, arms held off the ribs); pulled toward
 // the person's own stance they read as a passer-by walking and waiting. The Hips position follows the legs, so the
 // feet stay on the ground. The pool body runs the same function after its mixer (poseBody), the bake before skinning.
+// `line`: the share of pedLegLine (feet toward one line, knees forward, a small toe-out) on a clip's rows.
 const TUNE = [
-  { legs: 0.24, arms: 0.30, spine: 0.30 },          // walk
+  { legs: 0.24, arms: 0.30, spine: 0.30, line: 1 }, // walk
   { legs: 0.50, arms: 0.55, spine: 0.35 },          // idle
-  null,                                             // run
+  { legs: 0, arms: 0, spine: 0, line: 1 },          // run (the clip as authored, its legs on the line)
   { legs: 0.50, arms: 0.55, spine: 0.35 },          // look
   // brisk: a human's longer step at 1.3-1.6 m/s (0.65-0.75 m) -- the thighs swing past the clip's own arc, the knees and
   // feet keep the walk's easing (all of the leg past it was a lunge: deep knees, a crouch)
-  { legs: 0.10, thigh: -0.25, hip: 0.10, arms: 0.18, spine: 0.22 },
+  { legs: 0.10, thigh: -0.25, hip: 0.10, arms: 0.18, spine: 0.22, line: 1 },
 ];
 const TUNE_LEGS = ['LeftUpLeg', 'LeftLeg', 'LeftFoot', 'RightUpLeg', 'RightLeg', 'RightFoot'];
 const TUNE_ARMS = ['LeftShoulder', 'LeftArm', 'LeftForeArm', 'LeftHand', 'RightShoulder', 'RightArm', 'RightForeArm', 'RightHand'];
 const TUNE_SPINE = ['Spine', 'Spine1', 'Spine2', 'Neck', 'Head'];
 const TUNE_THIGH = ['LeftUpLeg', 'RightUpLeg'], TUNE_SHIN = ['LeftLeg', 'LeftFoot', 'RightLeg', 'RightFoot'];
-const _tune = { legs: 0, thigh: 0, hip: 0, arms: 0, spine: 0 };
+const _tune = { legs: 0, thigh: 0, hip: 0, arms: 0, spine: 0, line: 0 };
 const _kA = new THREE.Vector3(), _kB = new THREE.Vector3(), _kC = new THREE.Vector3();
 // The walk clip is the hero's (deep knees): at a pedestrian's pace its stance knee sat at 24-34 deg at mid-stance on the
 // walk rows and 38-49 on 'brisk' -- a crouch (2026-09-26, the client's review: 「歩く時に膝が曲がりすぎ」; a person's is
@@ -1223,6 +1216,43 @@ function liftLegs(h, lift) {
     K.getWorldQuaternion(_lqP); F.quaternion.copy(_lqP.invert().multiply(_lF[i])); F.updateMatrixWorld(true);
   }
 }
+// walk / brisk: the stance knee at mid-stance, measured over the cycle (action `a` of def `d`, tuned as baked), and the
+// pelvis lift that straightens it to KNEE_STANCE (the bake runs this once per scan and clip)
+function measureLift(h, a, d, bind) {
+  let phi = 0, best = 1e9, la = 0, lb = 0;
+  for (let k = 0; k < d.F; k++) {
+    a.time = (k / d.F) * d.dur; h.mixer.update(0); tunePose(h, bind, TUNE[d.id], 1); h.group.updateMatrixWorld(true);
+    const Lw = h.bones.LeftFoot.matrixWorld.elements, Rw = h.bones.RightFoot.matrixWorld.elements, sL = Lw[13] <= Rw[13], st = sL ? 'Left' : 'Right';
+    const hip = h.bones.Hips.matrixWorld.elements, under = Math.abs((sL ? Lw : Rw)[14] - hip[14]);
+    if (under < best) {
+      best = under;
+      _kA.setFromMatrixPosition(h.bones[st + 'UpLeg'].matrixWorld); _kB.setFromMatrixPosition(h.bones[st + 'Leg'].matrixWorld); _kC.setFromMatrixPosition(h.bones[st + 'Foot'].matrixWorld);
+      la = _kA.distanceTo(_kB); lb = _kB.distanceTo(_kC);
+      _kC.sub(_kB); _kB.sub(_kA); phi = _kB.angleTo(_kC) * 180 / Math.PI;
+    }
+  }
+  return { lift: kneeLift(la, lb, phi), phi };
+}
+// Review (tools/pedwalk.html): pose a pedestrian body exactly as the bake poses one frame of clip `id` (CLIP_WANT /
+// POSE_ID ids) at `phase`, on the body's own frozen skeleton. Returns { lift }.
+export function reviewPose(h, id, phase) {
+  const want = CLIP_WANT[id], pn = Object.keys(POSE_ID).find((k) => POSE_ID[k] === id);
+  const name = want ? (want[2] || want[0]) : pn, F = want ? want[1] : 4, clip = name ? getClip(name) : null;
+  if (!clip) return null;
+  h.frozenPose = true;
+  if (!h._rvBind) { const b = { q: {}, hip: h.bones.Hips.position.clone() }; for (const n of HUM.BONE_NAMES) if (h.bones[n]) b.q[n] = h.bones[n].quaternion.clone(); h._rvBind = b; }
+  const bind = h._rvBind, d = { id, F, dur: clip.duration, pose: !want };
+  h.mixer.stopAllAction();
+  const a = h.mixer.clipAction(clip);
+  a.reset(); a.setLoop(THREE.LoopRepeat, Infinity); a.setEffectiveTimeScale(1); a.setEffectiveWeight(1); a.play();
+  const lift = id === 0 || id === 4 ? (h._rvLift && h._rvLift[id] != null ? h._rvLift[id] : ((h._rvLift || (h._rvLift = {}))[id] = measureLift(h, a, d, bind).lift)) : 0;
+  a.time = phase * d.dur; h.mixer.update(0);
+  if (!d.pose) tunePose(h, bind, TUNE[id], 1);
+  if (lift > 0) liftLegs(h, lift);
+  clampHandsLike(h);
+  h.group.updateMatrixWorld(true);
+  return { lift };
+}
 // the pelvis lift that brings a stance knee flexed phi (deg) to KNEE_STANCE, for thigh a and shin b (metres)
 function kneeLift(a, b, phi) {
   const D = (f) => Math.sqrt(a * a + b * b + 2 * a * b * Math.cos(f * Math.PI / 180));
@@ -1239,6 +1269,136 @@ function tunePose(h, bind, T, k) {
   if (hp) B.Hips.position.lerp(bind.hip, hp * k);
   if (T.arms > 0) for (const n of TUNE_ARMS) if (B[n] && q[n]) B[n].quaternion.slerp(q[n], T.arms * k);
   if (T.spine > 0) for (const n of TUNE_SPINE) if (B[n] && q[n]) B[n].quaternion.slerp(q[n], T.spine * k);
+  if (T.line > 0) pedLegLine(h, T.line * k);
+}
+
+// 2026-09-28 (client: 「通行人の歩き方、特に女性がガニ股で歩いていてださい」). The walk is the hero's (a 195 cm man's
+// wide, rolling stride): on the passers-by each ankle landed 8-15 cm off the walking line (step width 15-27 cm, a
+// person's is 7-12), the thighs 1-4.5 deg abducted and the flexed knees pointing 5-9 deg out (up to 16) -- bow-legged,
+// worst on the short women. After the clip and its tuning, each leg is
+//   1. swung about the forward axis at the hip joint so its ankle sits LINE_W x the hip joint's half spacing off the
+//      body's walking line (women 0.40, men 0.62: step widths ~7 and ~11 cm), a little wider while it swings past the
+//      standing foot (LINE_SWING);
+//   2. turned about its own hip-ankle axis so a flexed knee points straight ahead (the ankle does not move);
+//   3. the foot keeps the clip's world orientation (the sole as the clip set it), turned about the vertical to TOE_OUT;
+//   4. a shoe (or a baggy hem) whose inner edge would cross the line is swung back out to LINE_GAP off it (footPts:
+//      the scans' feet sit off their ankle joints and some wear wide trainers), never wider than the clip had it.
+// Measured on the 24 scans (tools/pedwalk.html, walk): step width women 0.14-0.24 -> 0.10-0.18 m, men 0.17-0.28 ->
+// 0.12-0.22, flexed knee out 5-9 deg -> 0 +- 0.2, toe-out 5 -> 6 deg.
+// The bake and the pool body run it inside tunePose (so liftLegs then straightens the knee in its new plane) at the
+// clip's TUNE[].line share. Pedestrian bodies only: the hero and the enemies never pass through crowdScan.
+const LINE_W = { fem: 0.40, male: 0.62 }, LINE_SWING = 0.010, LINE_GAP = 0.004, TOE_OUT = 6, LINE_MAX = 0.16;   // (rad)
+const PED_FEM = new Map((HUM.PED_SCANS || []).map((p) => [p.key, !!p.fem]));
+const _gX = new THREE.Vector3(), _gZ = new THREE.Vector3(), _gO = new THREE.Vector3(), _gq = new THREE.Quaternion();
+const _pA = [new THREE.Vector3(), new THREE.Vector3()], _pC = [new THREE.Vector3(), new THREE.Vector3()], _pF = [new THREE.Quaternion(), new THREE.Quaternion()];
+const _pV = new THREE.Vector3(), _pK = new THREE.Vector3(), _pU = new THREE.Vector3(), _pD = new THREE.Vector3(), _pT = new THREE.Vector3();
+const _pq = new THREE.Quaternion(), _pqW = new THREE.Quaternion(), _pqP = new THREE.Quaternion(), _UPY = new THREE.Vector3(0, 1, 0);
+// The shoe and a trouser's hem, per scan and side: the outline of the Foot / ToeBase-weighted vertices under 20 cm (the
+// foot's frame) and the Leg-weighted ones under 14 cm (the shin's: a baggy hem), kept as the farthest point in each of
+// 24 bearings about their centre -- where pedLegLine finds the foot's inner edge on the posed body. Measured once.
+const FOOT_PTS = new Map();
+function footPts(h) {
+  let F = FOOT_PTS.get(h.ped);
+  if (F) return F;
+  F = {};
+  const geo = h.skinned && h.skinned.geometry, P = geo && geo.attributes.position, si = geo && geo.attributes.skinIndex, sw = geo && geo.attributes.skinWeight;
+  const names = HUM.BONE_NAMES, bones = h.skeleton.bones, inv = h.skeleton.boneInverses;
+  for (const S of ['Left', 'Right']) {
+    for (const [part, bn0, ymax] of [['foot', S + 'Foot', 0.2], ['cuff', S + 'Leg', 0.14]]) {
+      const j = bones.findIndex((b) => b.name === bn0), out = [];
+      if (P && si && sw && j >= 0) {
+        const pts = [];
+        for (let i = 0; i < P.count; i++) {
+          const y = P.getY(i); if (y > ymax) continue;
+          let bw = 0, bn = null;
+          for (let c = 0; c < 4; c++) { const x = sw.getComponent(i, c); if (x > bw) { bw = x; bn = names[si.getComponent(i, c)]; } }
+          if (bw >= 0.5 && (bn === bn0 || (part === 'foot' && bn === S + 'ToeBase'))) pts.push(P.getX(i), y, P.getZ(i));
+        }
+        let cx = 0, cz = 0; const n = pts.length / 3;
+        for (let i = 0; i < n; i++) { cx += pts[i * 3]; cz += pts[i * 3 + 2]; }
+        cx /= n || 1; cz /= n || 1;
+        const best = new Float32Array(24).fill(-1), at = new Int32Array(24).fill(-1);
+        for (let i = 0; i < n; i++) {
+          const dx = pts[i * 3] - cx, dz = pts[i * 3 + 2] - cz, r = dx * dx + dz * dz, b = Math.floor(((Math.atan2(dz, dx) / Math.PI + 1) / 2) * 24) % 24;
+          if (r > best[b]) { best[b] = r; at[b] = i; }
+        }
+        for (const i of at) if (i >= 0) out.push(_v.set(pts[i * 3], pts[i * 3 + 1], pts[i * 3 + 2]).applyMatrix4(inv[j]).clone());
+      }
+      F[S + part] = { bone: bn0, pts: out };
+    }
+  }
+  FOOT_PTS.set(h.ped, F);
+  return F;
+}
+// the innermost reach of that side's shoe / hem across the walking line (+ = still on its own side), world metres
+function footEdge(h, F, S, s) {
+  let e = Infinity;
+  for (const part of ['foot', 'cuff']) {
+    const G = F[S + part], M = h.bones[G.bone].matrixWorld;
+    for (const q of G.pts) e = Math.min(e, s * _pV.copy(q).applyMatrix4(M).sub(_gO).dot(_gX));
+  }
+  return e;
+}
+function pedLegLine(h, k) {
+  const B = h.bones, H = B.Hips; if (!H || !B.LeftUpLeg || !B.RightUpLeg || !B.LeftToeBase || !B.RightToeBase) return;
+  h.group.updateMatrixWorld(true);
+  h.group.getWorldQuaternion(_gq); _gX.set(1, 0, 0).applyQuaternion(_gq); _gZ.set(0, 0, 1).applyQuaternion(_gq); _gO.setFromMatrixPosition(h.group.matrixWorld);
+  _gX.y = 0; _gX.normalize(); _gZ.y = 0; _gZ.normalize();
+  const sides = ['Left', 'Right'];
+  for (let i = 0; i < 2; i++) { _pA[i].setFromMatrixPosition(B[sides[i] + 'UpLeg'].matrixWorld); _pC[i].setFromMatrixPosition(B[sides[i] + 'Foot'].matrixWorld); B[sides[i] + 'Foot'].getWorldQuaternion(_pF[i]); }
+  const sc = h.group.scale.x || 1;
+  const half = 0.5 * Math.abs(_pV.subVectors(_pA[0], _pA[1]).dot(_gX)), wT = half * (PED_FEM.get(h.ped) ? LINE_W.fem : LINE_W.male), FP = footPts(h);
+  for (let i = 0; i < 2; i++) {
+    const s = i === 0 ? 1 : -1, U = B[sides[i] + 'UpLeg'], K = B[sides[i] + 'Leg'], F = B[sides[i] + 'Foot'], T = B[sides[i] + 'ToeBase'];
+    const A = _pA[i], C = _pC[i];
+    // 1. the ankle toward the line (wider by LINE_SWING while this foot is up and the other planted)
+    const up = Math.min(1, Math.max(0, (C.y - _pC[1 - i].y) / (0.04 * sc))), x0 = s * _pT.subVectors(C, _gO).dot(_gX);
+    const want = s * (wT + LINE_SWING * sc * up);
+    _pV.subVectors(C, A);
+    const vx = _pV.dot(_gX), vy = _pV.y, ax = _pT.subVectors(A, _gO).dot(_gX);
+    const vx2 = vx + (want - ax - vx) * k, r2 = vx * vx + vy * vy;
+    if (r2 > vx2 * vx2 && vy < 0) {
+      let th = Math.atan2(-Math.sqrt(r2 - vx2 * vx2), vx2) - Math.atan2(vy, vx);
+      th = Math.max(-LINE_MAX, Math.min(LINE_MAX, th));
+      // a turn in the (X, up) plane, about X x up (+th turns X toward up: the ankle's angle in that plane grows by th)
+      _pq.setFromAxisAngle(_pU.crossVectors(_gX, _UPY).normalize(), th);
+      U.getWorldQuaternion(_pqW); _pqW.premultiply(_pq); H.getWorldQuaternion(_pqP); U.quaternion.copy(_pqP.invert().multiply(_pqW)); U.updateMatrixWorld(true);
+    }
+    // 2. the flexed knee straight ahead, about the hip-ankle axis
+    C.setFromMatrixPosition(F.matrixWorld); _pK.setFromMatrixPosition(K.matrixWorld);
+    _pU.subVectors(C, A); const L = _pU.length(); _pU.divideScalar(L || 1);
+    _pV.subVectors(_pK, A); _pV.addScaledVector(_pU, -_pV.dot(_pU));
+    const off = _pV.length(), wk = Math.min(1, Math.max(0, (off / (L || 1) - 0.02) / 0.05)) * k;
+    if (wk > 0) {
+      _pD.copy(_gZ).addScaledVector(_pU, -_gZ.dot(_pU));
+      if (_pD.lengthSq() > 1e-8) {
+        _pD.normalize(); _pV.normalize();
+        const ang = Math.atan2(_pT.crossVectors(_pV, _pD).dot(_pU), _pV.dot(_pD));
+        _pq.setFromAxisAngle(_pU, ang * wk);
+        U.getWorldQuaternion(_pqW); _pqW.premultiply(_pq); H.getWorldQuaternion(_pqP); U.quaternion.copy(_pqP.invert().multiply(_pqW)); U.updateMatrixWorld(true);
+      }
+    }
+    // 3. the foot: the clip's world orientation, turned to TOE_OUT
+    K.getWorldQuaternion(_pqP); F.quaternion.copy(_pqP.invert().multiply(_pF[i])); F.updateMatrixWorld(true);
+    _pT.setFromMatrixPosition(T.matrixWorld).sub(C.setFromMatrixPosition(F.matrixWorld));
+    const toe = Math.atan2(s * _pT.dot(_gX), _pT.dot(_gZ)), dt = (TOE_OUT * Math.PI / 180 - toe) * k;
+    if (Math.abs(dt) > 1e-4 && Math.abs(dt) < 0.5) {
+      _pq.setFromAxisAngle(_UPY, s * dt);                            // (X x Z = -up: +about up turns Z toward X)
+      F.getWorldQuaternion(_pqW); _pqW.premultiply(_pq); K.getWorldQuaternion(_pqP); F.quaternion.copy(_pqP.invert().multiply(_pqW)); F.updateMatrixWorld(true);
+    }
+    // 4. never past the line: a shoe (or a hem) whose inner edge crosses LINE_GAP swings the leg back out that far
+    const e = footEdge(h, FP, sides[i], s);
+    // (never wider than the clip had it: a long robe's hem is not a foot)
+    C.setFromMatrixPosition(F.matrixWorld);
+    const dx = Math.min(LINE_GAP * sc - e, x0 - s * _pT.subVectors(C, _gO).dot(_gX));
+    if (dx > 1e-4) {
+      F.getWorldQuaternion(_pqW); _pF[i].copy(_pqW);
+      const th = Math.min(LINE_MAX, dx / Math.max(0.2, A.y - C.y));
+      _pq.setFromAxisAngle(_pU.crossVectors(_gX, _UPY).normalize(), s * th);
+      U.getWorldQuaternion(_pqW); _pqW.premultiply(_pq); H.getWorldQuaternion(_pqP); U.quaternion.copy(_pqP.invert().multiply(_pqW)); U.updateMatrixWorld(true);
+      K.getWorldQuaternion(_pqP); F.quaternion.copy(_pqP.invert().multiply(_pF[i])); F.updateMatrixWorld(true);
+    }
+  }
 }
 
 // humanoid.js's wrist clamp (clampHands, not exported), run on every baked frame so the VAT and a frozen pool body

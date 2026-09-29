@@ -22,6 +22,7 @@ import * as L from './lib.js';
 import { SHOP_BAYS, PEDS, paintPed } from './genericBuilding.js';
 import { recipeFor } from './interiorRecipes.js';
 import { groundY } from '../cityData.js';
+import { MOBILE } from '../../core/mobileProfile.js';
 
 // the showpiece area (pass 14: the whole map square, ±SHOW_R — 明治通り at 宮益坂下 is 174 m out) where every ground
 // floor is a room; the level-of-detail distances
@@ -51,7 +52,8 @@ export const CUT = {
 //   y 1152..1536  twenty-four aisle / wall category signs (konbini / drugstore / bookshop / fashion floor)
 //   y 1536..1856  a shoe wall, a lit accessory case, a mirror, face-out clothes on a wall rail
 //   y 1856..2624  eight fashion lightboxes: the client's scans shot on seamless studio backdrops (no pictograms)
-const AW = 1024, AH = 2624;
+//   y 2624..2752  eight more category signs: the electronics floors (LABY) and the discount jungle (MEGA donki)
+const AW = 1024, AH = 2752;
 const px = (x0, y0, x1, y1) => [x0 / AW, 1 - y1 / AH, x1 / AW, 1 - y0 / AH];
 const FACE = (i) => { const x = (i % 4) * 256, y = Math.floor(i / 4) * 320; return px(x, y, x + 256, y + 320); };
 const [BOOKS1, BOOKS2, PACKS, SNACKS, BOTTLES, COSM, MAGS, BOXES] = [0, 1, 2, 3, 4, 5, 6, 7].map(FACE);
@@ -60,6 +62,7 @@ const MENU = (i) => px(i * 256, 896, (i + 1) * 256, 1024);
 const POPC = (i) => px(i * 128, 1024, (i + 1) * 128, 1152);
 const CAT = (i) => px((i % 4) * 256, 1152 + Math.floor(i / 4) * 64, (i % 4 + 1) * 256, 1216 + Math.floor(i / 4) * 64);
 const SHOEW = px(0, 1536, 256, 1856), ACCW = px(256, 1536, 512, 1856), MIRR = px(512, 1536, 768, 1856), CLOTH = px(768, 1536, 1024, 1856);
+const CAT2 = (i) => px((i % 4) * 256, 2624 + Math.floor(i / 4) * 64, (i % 4 + 1) * 256, 2688 + Math.floor(i / 4) * 64);
 const FPOST = (i) => { const x = (i % 4) * 256, y = 1856 + Math.floor(i / 4) * 384; return px(x, y, x + 256, y + 384); };
 // the scans that read as fashion models (the crowd's stylish ones first; any baked scan works)
 const MODELS = ['elegant_night_out_4745', 'silver_noir_swagger_4736', 'anime_inspired_street_0039', 'man_in_black_casual_o_5836', 'confident_modern_gent_4727',
@@ -234,6 +237,12 @@ function goodsAtlas() {
     const x = (i % 4) * 256, y = 1152 + Math.floor(i / 4) * 64, col = ['#6a3fb0', '#e0602a', '#1f7ad0', '#d0302a', '#e0508a', '#2a9a5a', '#e89a20', '#3a4a8a', '#1f6a4a', '#c8302a', '#6a4a8a', '#2a5a9a', '#d8702a', '#2a8aa8', '#5a3a6a', '#3a3a3a', '#c8102e', '#1a1a1a', '#2a4a8a', '#b8905a', '#3a6a5a', '#6a3a2a', '#1e3a5a', '#7a4a7a'][i];
     g.fillStyle = col; g.fillRect(x + 2, y + 2, 252, 60); g.fillStyle = 'rgba(255,255,255,0.9)'; g.fillRect(x + 8, y + 8, 6, 48);
     text(t, x + 134, y + 33, t.length > 6 ? 28 : 38, '#ffffff', { weight: '900', font: /^[A-Z ]+$/.test(t) ? L.FONT_LATIN : L.FONT_JP });
+  });
+  // category signs for the two Bunkamura stores (y 2624..2752): electronics floors, the discount jungle
+  [['テレビ', '#1f4c8a'], ['パソコン', '#1f6fc0'], ['スマートフォン', '#d8232e'], ['カメラ・ゲーム', '#2f9a4a'], ['驚安!!', '#ffd21e'], ['食品・お菓子', '#e0602a'], ['おみやげ', '#c8202e'], ['コスメ・香水', '#e0508a']].forEach(([t, col], i) => {
+    const x = (i % 4) * 256, y = 2624 + Math.floor(i / 4) * 64, dark = col === '#ffd21e';
+    g.fillStyle = col; g.fillRect(x + 2, y + 2, 252, 60); g.fillStyle = dark ? '#c8202e' : 'rgba(255,255,255,0.9)'; g.fillRect(x + 8, y + 8, 6, 48);
+    text(t, x + 134, y + 33, t.length > 5 ? 30 : 40, dark ? '#c8202e' : '#ffffff', { weight: '900' });
   });
   // ---- y 1536..1856: shoe wall | lit accessory case | mirror | face-out clothes
   { const Y = 1536;
@@ -474,6 +483,84 @@ function makeParts() {
   // a lit back wall: a wash quad whose light rises to the ceiling (per-vertex self-light: dark at the fixtures' top)
   { const p = new Part(); p.quad([-0.5, 0, 0], [0.5, 0, 0], [0.5, 1, 0], [-0.5, 1, 0], [0, 0, 1], new THREE.Color(W), null, 0);
     p.lit[p.lit.length - 4] = p.lit[p.lit.length - 3] = -0.3; p.lit[p.lit.length - 2] = p.lit[p.lit.length - 1] = 0.22; P.wash = p; }
+  // ---- the Bunkamura stores (MEGA donki / LABY, retailFronts.js): vertex-coloured parts, one draw call per kind
+  // the jungle's 2.3 m gondolas (two faces of goods, true-scale), and the overstock piled on top of them / in the wagons:
+  // a heap of cartons in the packaging palette, no textures
+  P.gondolaTall = shelf(new Part(), 2.3, 0.9, PACKS, SNACKS, 0xe4e4e0);
+  P.gondolaTallB = shelf(new Part(), 2.3, 0.9, COSM, BOXES, 0xe4e4e0);
+  const PKC = [0xe05a5a, 0x4a86d8, 0xe8c850, 0x50b070, 0xd870b0, 0xf4f4f0, 0xe89040, 0x8a70d0, 0x40b8c8, 0xc83030, 0xffd21e, 0x2a8a4a];
+  { const p = new Part(); let sd = 11; const r = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+    for (let x = -0.47; x < 0.44;) {
+      const w = Math.min(0.47 - x, 0.13 + r() * 0.2); let y = 0;
+      for (let l = 0, nL = 1 + Math.floor(r() * 3); l < nL; l++) { const h = 0.12 + r() * 0.18, d = 0.46 + r() * 0.34; p.box(x + w / 2, y + h / 2, (r() - 0.5) * 0.08, w - 0.012, h, d, PKC[Math.floor(r() * PKC.length)], { keep: true, lit: 0.05 }); y += h; }
+      x += w;
+    }
+    P.pile = p; }
+  // screens: [upper, lower] colours of a bright picture (sky / field, sunset, sea, anime pastel …)
+  const SCR = [[0x6ab8f0, 0x3a9a4a], [0xf0a050, 0x5a3a6a], [0x3aa0d8, 0x1a3a7a], [0x60d0a0, 0x2a6a4a], [0xf06a8a, 0xffd0a0], [0x9a7ae8, 0x2a2a5a], [0xfff0c0, 0xd84a3a], [0x50c8e8, 0xf4f4f0]];
+  // TV wall unit, 1 m: three lit screens stacked on a black frame (red price cards under each), a white base cabinet
+  const tv = (o) => {
+    const p = new Part(); p.box(0, 1.3, -0.02, 1, 2.6, 0.26, 0x24262a, { keep: true });
+    [[0.62, 0.5], [1.3, 0.6], [2.1, 0.66]].forEach(([cy, h], j) => {
+      const [a, b] = SCR[(j * 3 + o) % SCR.length];
+      p.box(0, cy, 0.13, 0.95, h, 0.03, 0x0c0c0e, { keep: true });
+      p.box(0, cy + h * 0.2, 0.146, 0.91, h * 0.52, 0.004, a, { keep: true, lit: 1 });
+      p.box(0, cy - h * 0.26, 0.146, 0.91, h * 0.4, 0.004, b, { keep: true, lit: 1 });
+      p.box(0.3, cy - h / 2 - 0.05, 0.15, 0.22, 0.07, 0.01, 0xd8232e, { keep: true, lit: 0.6 });
+    });
+    p.box(0, 0.15, 0.1, 1, 0.3, 0.5, W);
+    return p;
+  };
+  P.tvWall = tv(0); P.tvWallB = tv(1);
+  // display tables 1.6 × 0.8: laptops open both ways (lit screens) / smartphones on stands, red price cards
+  { const p = new Part(); p.box(0, 0.44, 0, 1.5, 0.88, 0.7, W).box(0, 0.9, 0, 1.6, 0.04, 0.8, 0xfafafa, { keep: true });
+    [[-0.55, 1], [0, 1], [0.55, 1], [-0.3, -1], [0.3, -1]].forEach(([x, f], i) => {
+      p.box(x, 0.93, f * 0.12, 0.34, 0.02, 0.23, 0x9aa0a8, { keep: true });
+      p.box(x, 1.04, -f * 0.01, 0.34, 0.22, 0.012, 0x1a1a1c, { keep: true });
+      p.box(x, 1.04, f * 0.0, 0.31, 0.19, 0.004, SCR[i % SCR.length][0], { keep: true, lit: 1 });
+      p.box(x + 0.1, 0.925, f * 0.34, 0.12, 0.012, 0.07, 0xd8232e, { keep: true, lit: 0.5 });
+    });
+    P.laptopTable = p; }
+  { const p = new Part(); p.box(0, 0.44, 0, 1.5, 0.88, 0.7, W).box(0, 0.9, 0, 1.6, 0.04, 0.8, 0xfafafa, { keep: true });
+    for (let i = 0; i < 6; i++) for (const f of [1, -1]) {
+      const x = -0.65 + i * 0.26;
+      p.box(x, 0.96, f * 0.22, 0.1, 0.08, 0.08, 0xdcdcdc, { keep: true }).box(x, 1.08, f * 0.22, 0.085, 0.17, 0.012, 0x1a1a1c, { keep: true });
+      p.box(x, 1.08, f * 0.228, 0.075, 0.15, 0.004, SCR[(i + (f > 0 ? 0 : 3)) % SCR.length][0], { keep: true, lit: 1 });
+    }
+    P.phoneTable = p; }
+  // escalator, local +x rising (35°) from a landing at −x through the ceiling (4.8 m rise): stepped treads with yellow
+  // nosings, glass balustrades, black handrails, a silver truss. Every face is built (it reads from both sides).
+  { const p = new Part(); p.keep = true;
+    const L0 = -3.9, xa = -3.1, xb = 3.3, H = 4.8, hw = 0.55, k = H / (xb - xa);
+    const side = (pts, z, n, hex, lit = 0) => { const c = new THREE.Color(hex), q = pts.map(([x, y]) => [x, y, z]); p.quad(q[0], q[1], q[2], q[3], n, c, null, lit); if (q.length > 4) p.quad(q[0], q[3], q[4], q[4], n, c, null, lit); };
+    const prism = (pts, z0, z1, hex, lit = 0) => {
+      side(pts, z1, [0, 0, 1], hex, lit); side(pts, z0, [0, 0, -1], hex, lit);
+      const c = new THREE.Color(hex);
+      for (let i = 0; i < pts.length; i++) { const a = pts[i], b = pts[(i + 1) % pts.length], ex = b[0] - a[0], ey = b[1] - a[1], l = Math.hypot(ex, ey) || 1; p.quad([a[0], a[1], z1], [a[0], a[1], z0], [b[0], b[1], z0], [b[0], b[1], z1], [ey / l, -ex / l, 0], c, null, lit); }
+    };
+    // truss (the silver side cladding) and the landing plate
+    const tb = xa + 0.95 / k;
+    for (const e of [-1, 1]) prism([[xa - 0.3, 0], [tb, 0], [xb, H - 0.95], [xb, H + 0.1], [xa - 0.3, 0.1]], e > 0 ? hw : -hw - 0.1, e > 0 ? hw + 0.1 : -hw, 0xc8ccd2);
+    p.box((L0 + xa) / 2, 0.05, 0, xa - L0, 0.1, 2 * hw + 0.2, 0xb8bcc2);
+    // treads with a yellow nosing
+    const n = 16, sx = (xb - xa) / n;
+    for (let i = 0; i < n; i++) { const x = xa + (i + 0.5) * sx, y = (i + 1) * H / n; p.box(x, y - 0.09, 0, sx, 0.18, 2 * hw, 0x3a3c40); p.box(x - sx / 2 + 0.03, y + 0.002, 0, 0.06, 0.004, 2 * hw - 0.04, 0xffd21e, { lit: 0.2 }); }
+    // glass balustrades (a pale tint, faintly lit) and the black handrails on them
+    for (const e of [-1, 1]) {
+      const z = e * (hw + 0.05);
+      prism([[L0 + 0.3, 0.1], [xa, 0.1], [xa, 1.0], [L0 + 0.3, 1.0]], z - 0.012, z + 0.012, 0xcfe2ea, 0.12);
+      prism([[xa, 0.1], [xb, H + 0.1], [xb, H + 1.0], [xa, 1.0]], z - 0.012, z + 0.012, 0xcfe2ea, 0.12);
+      prism([[L0 + 0.2, 1.0], [xa, 1.0], [xa, 1.08], [L0 + 0.2, 1.08]], z - 0.04, z + 0.04, 0x141414);
+      prism([[xa, 1.0], [xb, H + 1.0], [xb, H + 1.08], [xa, 1.08]], z - 0.04, z + 0.04, 0x141414);
+    }
+    P.escalator = p; }
+  // floor-standing lit signs (the category on both faces, on a pole)
+  for (const [k, i] of [['standM', 0], ['standN', 2]]) {
+    const p = new Part(); p.box(0, 0.02, 0, 0.42, 0.04, 0.42, 0x9a9a9a, { keep: true }).box(0, 0.75, 0, 0.04, 1.5, 0.04, 0x9a9a9a, { keep: true }).box(0, 1.6, 0, 0.94, 0.26, 0.03, 0xffffff, { keep: true });
+    face(p, 0, 1.6, 0.9, 0.225, 0.016, CAT2(i), 0.2); face(p, 0, 1.6, 0.9, 0.225, 0.016, CAT2(i + 1), 0.2, true);
+    P[k] = p;
+  }
+  ['catM', 'catN', 'catO', 'catP'].forEach((k, i) => { const p = new Part(); p.box(0, 0.3, 0, 0.005, 0.36, 0.005, 0x555555); face(p, 0, 0, 0.9, 0.225, 0.004, CAT2(i * 2), 0.12); face(p, 0, 0, 0.9, 0.225, 0.004, CAT2(i * 2 + 1), 0.12, true); P[k] = p; });
   return P;
 }
 
@@ -585,6 +672,69 @@ function layout(bay, rc, W, D, Hr, rnd) {
   const steam = (u, v) => put('steam', u, v, 0, [1, 1, 1], 0xffffff, 1.6);
   // a display niche (a corner shop squeezed by its neighbour's room to under 2.6 m): a lit back wall full of the
   // trade's goods / boards right behind the glass, POP, a board above — never an empty shallow box
+  // ---- MEGA ドン・キホーヂ (the whole frontage, ~10–12 m deep): the discount jungle after the store's own floor —
+  // wagons of bargain goods behind the glass, the checkout row by the door with its queue, then narrow aisles between
+  // 2.3 m gondolas with overstock piled to the ceiling, fluorescent tubes down every aisle, and the ceiling crammed with
+  // hanging POP price cards and category boards
+  if (rc.arch === 'donki' && rc.mega && W > 6 && D > 6) {
+    const reg = Math.min(4.6, W * 0.3), v0 = 3.0, v1 = D - 0.9;
+    backShelves('wallGoods', rc.fix, 1.15); sideShelves('wallGoods', v0 - 0.4, D - 0.6, rc.fix, 1.15);
+    for (let u = -W / 2 + 0.9; u <= W / 2 - reg - 0.7; u += 1.45) {
+      put('lowGoods', u, 0.8, 0, [1.25, 1, 0.9], 0xd8d2c0); put('pile', u, 0.8, rnd() * 0.3 - 0.15, [1.15, 0.8, 0.85], 0xffffff, 0.9);
+      put(pk++ % 2 ? 'popB' : 'pop', u, 0.8, rnd() * 0.4 - 0.2, [1.5, 1.5, 1], 0x444444, 1.95);
+    }
+    const cu = W / 2 - reg / 2;                                                 // the checkout row by the door, a queue
+    put('counter', cu, 1.9, 0, [reg - 0.5, 1, 0.8], rc.accent); put('catO', cu, 1.9, 0, [2.4, 2.4, 1], 0x555555, Math.min(Hr - 0.7, 3.1));
+    man(cu - reg / 4, 2.55, Math.PI, 'idle', true); man(cu + reg / 4, 2.55, Math.PI, 'idle', true);
+    man(cu - reg / 4, 1.2, 0, 'idle'); man(cu - reg / 4 + 0.2, 0.55, 0.2, 'idle');
+    const ais = aisles({ uA: -W / 2 + 0.5, uB: W / 2 - 0.5, v0, v1, k: 'gondolaTall', k2: 'gondolaTallB', sy: 1, gap: 0.95, signs: ['catO', 'catP', 'catB', 'catC', 'catA'], pop: true, people: Math.max(2, nP() - 4) });
+    // overstock on every gondola (to ~3 m), the fluorescent tubes down the aisles, a row across the entrance zone
+    let gi = 0;
+    for (const it of items.slice()) if ((it.k === 'gondolaTall' || it.k === 'gondolaTallB') && (!MOBILE || gi++ % 2 === 0)) put('pile', it.u, it.v, it.r + (rnd() - 0.5) * 0.1, [1, 0.8 + rnd() * 0.5, 1], 0xffffff, 2.3);
+    for (const u of ais) put('panel', u, (v0 + v1) / 2, HP, [(v1 - v0) / 1.2, 1, 0.4], rc.light, Hr - 0.1);
+    for (let u = -W / 2 + 1.2; u <= W / 2 - 1; u += 2.4) put('panel', u, 1.5, 0, [1.6, 1, 0.4], rc.light, Hr - 0.1);
+    // the ceiling jungle: POP cards at every angle, big category boards over the aisles
+    for (let v = 2.2; v < D - 0.6; v += 1.1) for (let u = -W / 2 + 0.7; u < W / 2 - 0.5; u += 1.3) if (rnd() < 0.4) put(pk++ % 2 ? 'popB' : 'pop', u + (rnd() - 0.5) * 0.5, v, rnd() * 1.2 - 0.6, [1.05, 1.05, 1], 0x444444, Hr - 0.5 - rnd() * 0.35);
+    ais.forEach((u, i) => { if (i % 2) put(['catO', 'catP', 'catB'][i % 3], u, (v0 + v1) / 2 + 1, 0, [2.2, 2.2, 1], 0x555555, Hr - 0.55); });
+    return { items, people };
+  }
+  // ---- LABY 渋谷: a white electronics floor under a bright light grid. 1F: the TV wall across the back, accessory walls,
+  // laptop / smartphone display tables in rows with category boards over them, floor signs at the door, the escalator
+  // pair rising through the ceiling behind the tables, a service counter. Upper floors (bay.upper, seen from the street
+  // through the navy glass): the light grid, display rows and tall shelving, a TV wall on alternate floors.
+  if (rc.arch === 'laby') {
+    const up = !!bay.upper, fl = bay.floor || 1;
+    const nx = Math.max(1, Math.round(W / 1.8)), nz = Math.max(1, Math.round(D / 1.7));
+    for (let i = 0; i < nx; i++) for (let j = 0; j < nz; j++) put('panel', -W / 2 + (i + 0.5) * W / nx, (j + 0.5) * D / nz, 0, [1, 1, 1], rc.light, Hr - 0.04);
+    let ti = fl;
+    const tvBack = () => { for (let u = -W / 2 + 0.5; u <= W / 2 - 0.5 + 1e-6; u += 1.0) put(ti++ % 3 ? 'tvWall' : 'tvWallB', u, D - 0.18, 0, [1, Math.min(1, (Hr - 0.3) / 2.6), 1], rc.fix); };
+    if (!up) {
+      tvBack(); sideShelves('wallGoods', 1.4, D - 0.8, rc.fix, 1);
+      const esc = W >= 10 && D >= 7, eu = -W / 2 + 4.6;
+      if (esc) { put('escalator', eu, D - 3.1, 0, [1, 1, 1], 0xc8ccd2); put('escalator', eu, D - 1.75, Math.PI, [1, 1, 1], 0xc8ccd2); }
+      const vMax = esc ? D - 4.3 : D - 1.7;
+      let r = 0;
+      for (let v = 1.7; v <= vMax; v += 1.9, r++) {
+        let c = 0;
+        for (let u = -W / 2 + 1.6; u <= W / 2 - 1.4; u += 2.5, c++) {
+          put((r + c) % 2 ? 'phoneTable' : 'laptopTable', u, v, 0, [1, 1, 1], rc.fix);
+          if (c % 2 === 0) put(r % 2 ? 'catN' : 'catM', u, v, 0, [1.3, 1.3, 1], 0x555555, Math.min(Hr - 0.55, 3.2));
+          if ((r * 3 + c) % 4 === 1) man(u + 0.3, v - 0.7, 0, 'look');
+          if ((r * 3 + c) % 5 === 2) man(u - 0.4, v + 0.7, Math.PI, 'look');
+        }
+      }
+      if (esc) put('catM', eu, D - 2.4, 0, [2, 2, 1], 0x555555, Math.min(Hr - 0.5, 3.4));
+      put('standM', -W / 2 + 1.0, 0.7, 0.35, [1, 1, 1], 0xffffff); put('standN', W / 2 - 1.0, 0.7, -0.35, [1, 1, 1], 0xffffff);
+      put('glassCounter', W / 2 - 0.9, D - 3.4, -HP, [2.2, 1, 1], rc.fix); man(W / 2 - 0.35, D - 3.4, -HP, 'idle', true);
+      pops(1.2, D - 1.5);
+    } else {
+      // the upper floors: seen from below, so what reads is the lit ceiling, tall shelving and the TV walls
+      if (fl % 2 === 0) tvBack(); else backShelves('gondolaTall', rc.fix, 1);
+      for (let v = 1.4, r = 0; v <= D - 1.6; v += 2.2, r++) for (let u = -W / 2 + 1.4 + (r % 2) * 1.2; u <= W / 2 - 1.2; u += 2.6) put(fl % 3 === 1 ? 'gondolaTallB' : (r + fl) % 2 ? 'phoneTable' : 'laptopTable', u, v, fl % 3 === 1 ? HP : 0, [1, 1, 1], rc.fix);
+      if (fl <= 3 && W > 6) man(0.4, 1.0, 0, 'look');
+    }
+    return { items, people };
+  }
   if (D < 2.6) {
     panels(); backWash();
     const eat = /ramen|cafe|fast|izakaya/.test(rc.arch), A = rc.arch;
@@ -868,8 +1018,11 @@ export function createInteriors({ engine, group }) {
   const root = new THREE.Group(); root.name = 'interiors';
   group.add(root);
   // ground floors: the bay's floor within 2.2 m of the local ground (on 道玄坂 / 宮益坂 a ground floor stands metres up)
-  const bays = SHOP_BAYS.filter((b) => b.y0 - groundY(b.x, b.z) < 2.2 && b.gh > 1.8);
-  for (const b of bays) b.rc = null;
+  const bays = SHOP_BAYS.filter((b) => !b.upper && b.y0 - groundY(b.x, b.z) < 2.2 && b.gh > 1.8);
+  // upper-floor rooms behind a store's glass (LABY's sales floors, retailFronts.js): shown, never a shop-front collider
+  // (a phone keeps the two lowest: the ones a street-level view actually looks into)
+  const uppers = SHOP_BAYS.filter((b) => b.upper && (!MOBILE || (b.floor || 2) <= 3));
+  for (const b of bays.concat(uppers)) b.rc = null;
   const state = { visible: 0, people: 0, cuts: 0, rooms: 0, levels: [0, 0, 0], rebuilds: 0 };
   const PEOPLE = PEDS ? { staff: PEDS.staff, shop: PEDS.shoppers, models: (() => { const m = MODELS.filter((k) => PEDS.meta.scans[k]); return m.length ? m : PEDS.shoppers; })() } : null;
   const floorMats = [matFloor];
@@ -935,16 +1088,16 @@ export function createInteriors({ engine, group }) {
 
   // ---- the showpiece set: every ground-floor bay within SHOW_R of the scramble, and the landmark ground floors
   // anywhere. Each gets its room at EVERY distance (no painted card), with the level of detail inside the room.
-  const LANDMARK = /TSUTAYU|STARBEANS|西部|MAGNET|1O9|109|駅前|Q-FRONT/;
-  const show = bays.filter((b) => Math.max(Math.abs(b.x), Math.abs(b.z)) < SHOW_R || b.hall || LANDMARK.test(b.name || ''));
+  const LANDMARK = /TSUTAYU|STARBEANS|西部|MAGNET|1O9|109|駅前|Q-FRONT|LABY|MEGA ドン/;
+  const show = bays.filter((b) => Math.max(Math.abs(b.x), Math.abs(b.z)) < SHOW_R || b.hall || LANDMARK.test(b.name || '')).concat(uppers);
   const world = (b, u, v, out) => { out.x = b.x + b.nz * u - b.nx * v; out.z = b.z - b.nx * u - b.nz * v; return out; };
   const _w = { x: 0, z: 0 };
   // a light shell colour is held under a luminance cap
   const shellK = (hex, k) => { _c.set(hex); const l = 0.2126 * _c.r + 0.7152 * _c.g + 0.0722 * _c.b; return k * Math.min(1, 0.5 / Math.max(0.05, l)); };
   // the level an item belongs to: 0 far (shell, light, back wall, big lit fixtures), 1 mid (the floor's fixtures),
   // 2 near (the small dressing: POP, boards, stools, lanterns, steam, pools, mirrors …)
-  const NEAR_K = /^(pop|popB|cat[A-L]|menu|menuFast|menuCafe|menuIz|stool|lantern|steam|pool|spot|noren|ticket|beam|mirror)$/;
-  const FAR_K = /^(panel|wash|track|lb[A-D]|fridge|kitchen|barShelf|posterA|posterB)$/;
+  const NEAR_K = /^(pop|popB|cat[A-P]|stand[MN]|menu|menuFast|menuCafe|menuIz|stool|lantern|steam|pool|spot|noren|ticket|beam|mirror)$/;
+  const FAR_K = /^(panel|wash|track|lb[A-D]|fridge|kitchen|barShelf|posterA|posterB|tvWall|tvWallB|escalator)$/;
   const levelOf = (it, D) => NEAR_K.test(it.k) ? 2 : FAR_K.test(it.k) || it.v >= D - 0.75 ? 0 : 1;
   const ADDITIVE = new Set(['steam', 'pool']);
 
@@ -955,7 +1108,7 @@ export function createInteriors({ engine, group }) {
   //    that keeps more window is narrowed on the side toward the other (a partition behind that part of its glass,
   //    as in many real corner shops); depth only if under 2 m of it would remain.
   {
-    const PRIO = { drug: 3, konbini: 3, donki: 3, generic: 3, books: 3, dept: 3, fashion: 2, shoes: 2, game: 2, capsule: 2 };
+    const PRIO = { laby: 4, drug: 3, konbini: 3, donki: 3, generic: 3, books: 3, dept: 3, fashion: 2, shoes: 2, game: 2, capsule: 2 };
     const base = (b) => { const W = b.roomW || (b.w - 0.04); return [-W / 2, W / 2]; };
     const rect = (b) => { const [uL, uR] = b.roomU, D = b.roomDfix, P = []; for (const [u, v] of [[uL + 0.06, 0.05], [uR - 0.06, 0.05], [uR - 0.06, D], [uL + 0.06, D]]) P.push([b.x + b.nz * u - b.nx * v, b.z - b.nx * u - b.nz * v]); return P; };
     const proj = (P, ax) => { let lo = Infinity, hi = -Infinity; for (const q of P) { const d = q[0] * ax[0] + q[1] * ax[1]; if (d < lo) lo = d; if (d > hi) hi = d; } return [lo, hi]; };
@@ -1082,6 +1235,8 @@ export function createInteriors({ engine, group }) {
       const out = c.out ?? 0.04, cy = c.y0 + c.gh / 2, ry = Math.atan2(c.nx, c.nz);
       items.push(['glass', 0, c.x + c.nx * (out + 0.025), cy, c.z + c.nz * (out + 0.025), ry, c.w, c.gh, 1, 0xffffff, 1]);
       items.push(['punch', 0, c.x + c.nx * (out + 0.005), cy, c.z + c.nz * (out + 0.005), ry, c.w - 0.04, c.gh - 0.03, 1, 0xffffff, 1]);
+      // tinted glass (LABY's navy upper floors): a multiplying pane over the room, just behind the sheen
+      if (b.tint) items.push(['tint', 0, c.x + c.nx * (out + 0.015), cy, c.z + c.nz * (out + 0.015), ry, c.w, c.gh, 1, b.tint, 1]);
     }
     // people: staff, then the window's dressed mannequins, then customers; the first two are shown from mid range
     // (as the crowd's lod2), the rest from near; a hall keeps more
@@ -1127,6 +1282,12 @@ export function createInteriors({ engine, group }) {
   };
   for (const [k, part] of Object.entries(P)) if (count[k]) mk(k, part.geo(), k === 'floor' ? matFloor : mat, count[k]);
   mk('glass', new THREE.PlaneGeometry(1, 1), glass, count.glass, 3);
+  if (count.tint) {
+    // dst × colour: the room behind stays readable, only its colour and level shift (no alpha, no lighting)
+    const tintMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.ZeroFactor, blendDst: THREE.SrcColorFactor, toneMapped: false, fog: false });
+    tintMat.name = 'interior:tint';
+    mk('tint', new THREE.PlaneGeometry(1, 1), tintMat, count.tint, 2.5);
+  }
   // the depth punch: the opening as a depth-only pane, drawn after the rooms (and the crowd tiers that carry the posed
   // people) and before the city — inside the opening the facade, the card and the building behind them fail the depth
   // test; outside it the facade covers the room as usual. No city shader is touched.

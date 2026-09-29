@@ -4,7 +4,8 @@
 // type. The reference description behind each recipe is in docs/reports/interiors.md. No marks: recognisable by
 // look (colour, light, fixtures), never by a logo.
 //
-//   arch     layout generator: books | konbini | drug | donki | fashion | shoes | dept | cafe | fast | ramen | izakaya |
+//   arch     layout generator: books | konbini | drug | donki (mega: the big discount jungle) | laby (the big electronics
+//            store; its upper floors too) | fashion | shoes | dept | cafe | fast | ramen | izakaya |
 //            game | capsule | karaoke | pachi | bank | phone | boutique | generic
 //   wall / floor / ceil / fix / accent   colours (0xRRGGBB)      light  ceiling-panel colour     glow  0..1 self-light
 //   dense    fixture density 0.6..1.6      pop  hanging POP colour or null      people [min, max] (scaled by area)
@@ -38,6 +39,9 @@ export const TENANT_RECIPES = [
   [/マツモトキヨヒ/, { arch: 'drug', accent: 0x1a56b8, pop: 0xffe000, dense: 1.35, people: [3, 6], ref: 'matsukiyo' }],
   [/三千里薬局/, { arch: 'drug', accent: 0xc8102e, pop: 0xffe000, dense: 1.4, people: [2, 5], ref: 'sanzenri' }],
   [/サンドラック|ヨコダ薬局|スキ薬局|薬局/, { arch: 'drug', accent: 0xd02020, pop: 0xffe000, dense: 1.3, ref: 'drug' }],
+  // the two Bunkamura retail stores (retailFronts.js registers their bays): whole-frontage rooms 10–12 m deep
+  [/MEGA ドン・キホーヂ/, { arch: 'donki', mega: true, wall: 0xe8e4da, floor: 0x9a968e, ceil: 0x2a2c34, fix: 0xecebe4, accent: 0xffd21e, light: 0xf8fbff, glow: 0.95, dense: 1.6, pop: 0xffe000, people: [8, 8], ref: 'mega_donki' }],
+  [/LABY/, { arch: 'laby', wall: 0xeef0f2, floor: 0xd8dade, ceil: 0xf6f7f8, fix: 0xf4f4f4, accent: 0xd8232e, light: 0xf6faff, glow: 0.9, dense: 1, pop: 0xd8232e, people: [8, 8], act: 'browse', ref: 'laby' }],
   [/ドン・キホーヂ/, { arch: 'donki', wall: 0x1a2a6a, floor: 0x2a2a30, ceil: 0x101838, fix: 0xe8e2d0, accent: 0xffe000, light: 0xf8fbff, glow: 0.95, dense: 1.6, pop: 0xffe000, people: [3, 6], ref: 'donki' }],
   [/ヴィレッジヴァンガート/, { arch: 'donki', wall: 0x3a2a1a, floor: 0x5a4028, ceil: 0x2a1e14, fix: 0x8a6a40, accent: 0xffd400, light: 0xffe0a8, glow: 0.7, dense: 1.5, pop: 0xffd400, people: [2, 5], act: 'browse', ref: 'vv' }],
   [/ビックエコー|カラオケ|ジャンカレ|パセリ/, { arch: 'karaoke', ref: 'karaoke' }],

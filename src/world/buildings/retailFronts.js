@@ -16,7 +16,10 @@ import * as L from './lib.js';
 import * as S from './shared.js';
 import * as R from './relief.js';
 import { groundY } from '../cityData.js';
+import { SHOP_BAYS, registerShopBay } from './genericBuilding.js';
 
+// the dressed frontages (review tools: tools/cam-shots.mjs viewpoints): { id, kind, main, mx, mz, nx, nz, len, y }
+export const RETAIL_FRONTS = [];
 const cache = new Map();
 const once = (k, f) => { if (!cache.has(k)) cache.set(k, f()); return cache.get(k); };
 
@@ -117,6 +120,25 @@ function washMaterial() {
   });
 }
 
+// ---- the 3D sales floors behind the glass. Each opening is registered as a shop bay: interiors.js builds the room
+// (MEGA donki's jungle / LABY's electronics floors, interiorRecipes.js) and opens the facade over it with its depth
+// punch. The display quads stay as the fallback when interiors are off (?interiors=0, the phones' safe tier).
+// the room depth the lot allows behind an opening, sampled across its width (a room must never poke out of the lot):
+// where a concave corner cuts one end short, the opening splits into a deep room and the short end's own room
+function registerRoom(F, poly, { u0, u1, y0, gh, out, name, type, cap = 12, ...extra }, depth = 0) {
+  const n = 8, us = [], ds = [];
+  for (let k = 0; k <= n; k++) { const u = u0 + 0.15 + (u1 - u0 - 0.3) * k / n, [x, z] = F.at(u, -0.05); us.push(u); ds.push(Math.min(cap, L.rayToPolygon(x, z, -F.nx, -F.nz, poly, -1, cap + 1)) - 0.4); }
+  let best = null;
+  for (let i = 0; i <= 3; i++) for (let j = 0; j <= 3; j++) {
+    const D = Math.min(...ds.slice(i, n + 1 - j)), a = i ? (us[i - 1] + us[i]) / 2 : u0, b = j ? (us[n - j] + us[n + 1 - j]) / 2 : u1;
+    if (D >= (depth ? 1.6 : 3) && b - a >= (depth ? 1.5 : 3) && (!best || (b - a) * D > best.s)) best = { a, b, D, s: (b - a) * D };
+  }
+  if (!best) return;
+  const [x, z] = F.at((best.a + best.b) / 2, 0);
+  registerShopBay({ x, z, y0, nx: F.nx, nz: F.nz, w: best.b - best.a, sw: best.b - best.a + 0.4, gh, type, name, real: null, depth: best.D, roomD: best.D, out, front: R.PAVE, case: null, ...extra });
+  if (depth < 1) for (const [a, b] of [[u0, best.a], [best.b, u1]]) if (b - a >= 1.5) registerRoom(F, poly, { u0: a, u1: b, y0, gh, out, name, type, cap, ...extra }, depth + 1);
+}
+
 // a point of a face is frontage when a carriageway lies within 12 m in front of it
 function frontage(field, x, z, nx, nz) {
   if (!field) return true;
@@ -142,6 +164,8 @@ function frontRun(field, F) {
 
 export function dressRetail({ batch, group, field }, lot, h, base) {
   const poly = L.ensureCW(lot.poly), electronics = lot.retail === 'electronics', top = base + h;
+  // the generic shop bays the base building registered on this lot give way to the store's own rooms
+  for (let i = SHOP_BAYS.length - 1; i >= 0; i--) { const b = SHOP_BAYS[i]; if (L.pointInPoly(b.x - b.nx * 0.6, b.z - b.nz * 0.6, poly)) SHOP_BAYS.splice(i, 1); }
   const faces = R.faces(poly);
   for (const F of faces) {
     const run = F.len > 4 ? frontRun(field, F) : null;
@@ -161,13 +185,14 @@ export function dressRetail({ batch, group, field }, lot, h, base) {
     for (const [a, b] of F.rest) R.skin(batch, F, whitePanel(), { u0: a, u1: b, y0: base, y1: top, out0: 0.03, d: 0.18 });
     if (!F.front) continue;
     const G = F.front, y = groundY(G.mx + G.nx * 0.2, G.mz + G.nz * 0.2) + 0.15, isMain = lot.retailMain && F === main;
-    if (electronics) labyFace(batch, group, G, { y, base, top, isMain });
-    else discountFace(batch, group, G, { y, base, top, isMain });
+    RETAIL_FRONTS.push({ id: lot.id, kind: lot.retail, main: !!isMain, mx: +G.mx.toFixed(2), mz: +G.mz.toFixed(2), nx: +G.nx.toFixed(3), nz: +G.nz.toFixed(3), len: +G.len.toFixed(2), y: +y.toFixed(2) });
+    if (electronics) labyFace(batch, group, G, { y, base, top, isMain, poly });
+    else discountFace(batch, group, G, { y, base, top, isMain, poly });
   }
 }
 
 // ---------------------------------------------------------------------------------------------------- LABY 渋谷
-function labyFace(batch, group, F, { y, base, top, isMain }) {
+function labyFace(batch, group, F, { y, base, top, isMain, poly }) {
   const M = S.mats(), glass = blueGlass(), metal = metalMat(), dark = darkMat(), len = F.len;
   const gf = y + 4.8, bandY0 = top - 5.2;                   // sales-floor grid between the 1F head and the parapet band
   const light = (u, cy, color, intensity, distance, out = 2) => { const [x, z] = F.at(u, out); const l = new THREE.PointLight(color, intensity, distance, 2); l.position.set(x, cy, z); group.add(l); };
@@ -208,10 +233,15 @@ function labyFace(batch, group, F, { y, base, top, isMain }) {
     light(0, top - 1, 0xffd6d6, 30, 12, 3);
   }
   light(0, y + 3.4, 0xe4f1ff, 55, 14, 2.5);
+  // the sales floors: 1F behind the storefront glass (its opening inside the jambs, under the head), and every floor
+  // behind the navy grid (above each storey's slab band, under the next transom), seen through a navy tint
+  registerRoom(F, poly, { u0: -len / 2 + 1.3, u1: len / 2 - 1.3, y0: y, gh: gf - 0.75 - y, out: 0.1, name: 'LABY 渋谷', type: 'elec' });
+  for (let k = 0, yb = gf; yb + LABY_STOREY <= bandY0 + 0.01; k++, yb += LABY_STOREY)
+    registerRoom(F, poly, { u0: -len / 2 + 1.05, u1: len / 2 - 1.05, y0: yb + 0.5, gh: LABY_STOREY - 0.6, out: 0.2, name: `LABY 渋谷 ${k + 2}F`, type: 'elec', cap: 10, upper: true, floor: k + 2, tint: 0xa9c0e8 });
 }
 
 // ----------------------------------------------------------------------------------------- MEGA ドン・キホーヂ
-function discountFace(batch, group, F, { y, base, top, isMain }) {
+function discountFace(batch, group, F, { y, base, top, isMain, poly }) {
   const M = S.mats(), white = whitePanel(), wr = whiteRelief(), dark = darkMat(), len = F.len;
   const light = (u, cy, color, intensity, distance, out = 2) => { const [x, z] = F.at(u, out); const l = new THREE.PointLight(color, intensity, distance, 2); l.position.set(x, cy, z); group.add(l); };
   const bandW = len, bandY = y + 6.1, bandTop = bandY + 1.5;
@@ -256,4 +286,6 @@ function discountFace(batch, group, F, { y, base, top, isMain }) {
   R.quad(batch, F, washMaterial(), -bw / 2, (bandTop + top) / 2, len - bw - 0.3, top - bandTop, 0.27);
   light(0, y + 3.2, 0xffe2a0, 55, 16, 2.5);
   light(0, base + (top - base) * 0.75, 0xfff6e8, 28, 20, 6);
+  // the jungle behind the glass (the opening inside the jambs, under the head)
+  registerRoom(F, poly, { u0: -len / 2 + 0.4, u1: len / 2 - 0.4, y0: y, gh: 4.05, out: 0.1, name: 'MEGA ドン・キホーヂ', type: 'drug' });
 }
